@@ -263,6 +263,12 @@ class CoordinateSanitizer {
             const hours = parseInt(match[1]);
             const minutes = parseInt(match[2]);
             const seconds = parseFloat(match[3]);
+            
+            // Check for negative values in HMS format
+            if (hours < 0 || minutes < 0 || seconds < 0) {
+                return { isValid: false, error: `Invalid RA format: ${raPart} (negative values not allowed in HMS)` };
+            }
+            
             const decimal = this.hmsToDecimal(hours, minutes, seconds);
             return { isValid: true, decimal, hours, minutes, seconds, format: 'hms' };
         }
@@ -273,6 +279,12 @@ class CoordinateSanitizer {
             const hours = parseInt(match[1]);
             const minutes = parseInt(match[2]);
             const seconds = parseFloat(match[3]);
+            
+            // Check for negative values in compact HMS format
+            if (hours < 0 || minutes < 0 || seconds < 0) {
+                return { isValid: false, error: `Invalid RA format: ${raPart} (negative values not allowed in HMS)` };
+            }
+            
             const decimal = this.hmsToDecimal(hours, minutes, seconds);
             return { isValid: true, decimal, hours, minutes, seconds, format: 'hms-compact' };
         }
@@ -501,13 +513,5 @@ class CoordinateSanitizer {
     }
 }
 
-// Export for different environments
-if (typeof module !== 'undefined' && module.exports) {
-    module.exports = CoordinateSanitizer;
-}
-
-if (typeof window !== 'undefined') {
-    window.CoordinateSanitizer = CoordinateSanitizer;
-}
-
-export default CoordinateSanitizer;
+// Export per CommonJS (Node.js)
+module.exports = CoordinateSanitizer;
