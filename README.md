@@ -7,10 +7,13 @@ A flexible and robust JavaScript library for parsing and sanitizing astronomical
 - **Multiple Input Formats**: Supports HMS/DMS, decimal, and compact coordinate formats
 - **Flexible Output**: Configurable output formats (Aladin, decimal, HMS/DMS)
 - **Range Validation**: Optional validation of RA (0-24h) and DEC (-90°/+90°) ranges
-- **Configurable**: Customizable precision and validation options
+- **Security**: Built-in protection against malicious input
+- **Object Recognition**: Automatically detects and passes through astronomical object names
+- **Unicode Support**: Handles various Unicode symbols and separators
 - **High Performance**: Optimized for batch processing
 - **Zero Dependencies**: Lightweight with no external dependencies
 - **Universal**: Works in Node.js and browsers
+- **TypeScript Support**: Includes complete TypeScript definitions
 
 ## Installation
 
@@ -43,11 +46,15 @@ console.log(result3.coordinates); // "08 13 49.440, -12 20 42.000"
 - **Colon separated**: `12:34:56.78, +12:34:56.78`
 - **Decimal**: `123.456, -12.345`
 - **Compact**: `123456, -123456`
+- **Space separated**: `12 34 56.7 -45 12 34.5`
+- **Mixed formats**: `12h 34m 56s, +12:34:56`
 
 ### Object Names
 - **Messier objects**: `M31`, `M42`
 - **NGC objects**: `NGC 1234`, `NGC 7000`
-- **Any string**: Passed through unchanged if not recognized as coordinates
+- **IC objects**: `IC 1396`
+- **Other catalogs**: `HD 209458`, `HIP 27989`, `SAO 123456`
+- **Named stars**: `Polaris`, `Vega`, `51 Eri`
 
 ### Separators
 Supports multiple separators between RA and DEC:
@@ -68,6 +75,7 @@ const sanitizer = new CoordinateSanitizer(options);
 - `outputFormat` (string): Output format - `'aladin'`, `'decimal'`, `'hms-dms'` (default: `'aladin'`)
 - `precision` (number): Decimal precision for output (default: `6`)
 - `validateRanges` (boolean): Enable range validation (default: `true`)
+- `strictMode` (boolean): Enable strict parsing mode (default: `false`)
 
 ### Methods
 
@@ -93,9 +101,19 @@ Main method for sanitizing coordinates.
 }
 ```
 
-#### `static getSupportedFormats()`
+#### Static Methods
+
+##### `getSupportedFormats()`
 
 Returns information about supported input and output formats.
+
+##### `createPreset(preset)`
+
+Creates a sanitizer with predefined configurations:
+- `'aladin'`: Aladin format with range validation
+- `'decimal'`: Decimal format with high precision
+- `'loose'`: Aladin format without range validation
+- `'strict'`: Aladin format with strict parsing and validation
 
 ## Usage Examples
 
@@ -118,16 +136,15 @@ const result3 = hmsSanitizer.sanitizeCoordinates('12.5, 12.5');
 console.log(result3.coordinates); // "12h 30m 0.000s, +12° 30' 0.000""
 ```
 
-### Custom Precision
+### Using Presets
 
 ```javascript
-const sanitizer = new CoordinateSanitizer({ 
-  outputFormat: 'decimal', 
-  precision: 2 
-});
+// Quick setup with presets
+const aladinSanitizer = CoordinateSanitizer.createPreset('aladin');
+const decimalSanitizer = CoordinateSanitizer.createPreset('decimal');
+const looseSanitizer = CoordinateSanitizer.createPreset('loose');
 
-const result = sanitizer.sanitizeCoordinates('12h 34m 56.123s, +12° 34\' 56.123"');
-console.log(result.coordinates); // "12.58, 12.58"
+const result = aladinSanitizer.sanitizeCoordinates('12h 34m 56s, +12° 34\' 56"');
 ```
 
 ### Range Validation
@@ -170,7 +187,7 @@ const results = inputs.map(input => {
 console.table(results);
 ```
 
-### Integration with Astronomical Software
+### Integration with Telescope Control
 
 ```javascript
 class TelescopeController {
@@ -181,7 +198,7 @@ class TelescopeController {
     });
   }
 
-  goto(target) {
+  gotoTarget(target) {
     const result = this.sanitizer.sanitizeCoordinates(target);
     
     if (!result.isValid) {
@@ -190,16 +207,50 @@ class TelescopeController {
 
     // Send to telescope
     this.sendToTelescope(result.coordinates);
+    
+    return {
+      target: result.coordinates,
+      inputType: result.metadata.inputFormat
+    };
   }
+}
+```
 
-  sendToTelescope(coordinates) {
-    // Implementation depends on telescope API
-    console.log(`Slewing to: ${coordinates}`);
+### Error Handling
+
+```javascript
+const sanitizer = new CoordinateSanitizer();
+
+function safeSearch(input) {
+  try {
+    const result = sanitizer.sanitizeCoordinates(input);
+    
+    if (!result.isValid) {
+      return {
+        success: false,
+        error: result.error,
+        suggestion: 'Please check coordinate format'
+      };
+    }
+
+    return {
+      success: true,
+      coordinates: result.coordinates,
+      inputType: result.metadata.inputFormat
+    };
+  } catch (error) {
+    return {
+      success: false,
+      error: error.message,
+      suggestion: 'Please contact support'
+    };
   }
 }
 ```
 
 ## Browser Usage
+
+### Script Tag
 
 ```html
 <script src="path/to/coordinate-sanitizer.js"></script>
@@ -210,7 +261,7 @@ class TelescopeController {
 </script>
 ```
 
-Or with ES6 modules:
+### ES6 Modules
 
 ```javascript
 import CoordinateSanitizer from 'coordinate-sanitizer';
@@ -219,14 +270,44 @@ const sanitizer = new CoordinateSanitizer();
 const result = sanitizer.sanitizeCoordinates('12h 34m 56s, +12° 34\' 56"');
 ```
 
+## TypeScript Support
+
+The library includes complete TypeScript definitions:
+
+```typescript
+import CoordinateSanitizer, { 
+  CoordinateSanitizerOptions, 
+  SanitizationResult 
+} from 'coordinate-sanitizer';
+
+const options: CoordinateSanitizerOptions = {
+  outputFormat: 'decimal',
+  precision: 4,
+  validateRanges: true
+};
+
+const sanitizer = new CoordinateSanitizer(options);
+const result: SanitizationResult = sanitizer.sanitizeCoordinates('M31');
+```
+
 ## Performance
 
 The library is optimized for high-performance applications:
 
-- **~10,000 coordinates/second** on modern hardware
+- **10,000+ coordinates/second** on modern hardware
 - **Zero dependencies** - no external libraries
 - **Efficient regex patterns** for fast parsing
 - **Minimal memory footprint**
+- **Batch processing support**
+
+## Security
+
+The library includes built-in security features:
+
+- **Input sanitization** prevents script injection
+- **Malicious content detection** blocks dangerous patterns
+- **Safe parsing** with input validation
+- **No eval() or dynamic code execution**
 
 ## Error Handling
 
@@ -244,6 +325,7 @@ Common error types:
 - Invalid coordinate format
 - Out of range values (RA > 24h, DEC > ±90°)
 - Malformed input strings
+- Security violations
 
 ## Testing
 
@@ -262,14 +344,41 @@ npm run example
 ## Contributing
 
 1. Fork the repository
-2. Create a feature branch
-3. Add tests for new functionality
-4. Ensure all tests pass
-5. Submit a pull request
+2. Create a feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
+
+## Development Setup
+
+```bash
+# Clone the repository
+git clone https://github.com/Francescodib/coordinate-sanitizer.git
+cd coordinate-sanitizer
+
+# Install dependencies
+npm install
+
+# Run tests
+npm test
+
+# Run examples
+npm run example
+```
+
+## Changelog
+
+### 1.0.0
+- Initial release
+- Support for multiple coordinate formats
+- Range validation
+- Security features
+- TypeScript support
+- Comprehensive test suite
 
 ## License
 
-MIT License - see LICENSE file for details.
+MIT License - see [LICENSE](LICENSE) file for details.
 
 ## Related Projects
 
@@ -279,6 +388,12 @@ MIT License - see LICENSE file for details.
 
 ## Support
 
-- [Documentation](https://github.com/yourusername/coordinate-sanitizer#readme)
-- [Issue Tracker](https://github.com/yourusername/coordinate-sanitizer/issues)
-- [Discussions](https://github.com/yourusername/coordinate-sanitizer/discussions)
+- [Documentation](https://github.com/Francescodib/coordinate-sanitizer#readme)
+- [Issue Tracker](https://github.com/Francescodib/coordinate-sanitizer/issues)
+- [Discussions](https://github.com/Francescodib/coordinate-sanitizer/discussions)
+
+## Author
+
+**Francesco di Biase**
+- GitHub: [@Francescodib](https://github.com/Francescodib)
+- Project: [coordinate-sanitizer](https://github.com/Francescodib/coordinate-sanitizer)

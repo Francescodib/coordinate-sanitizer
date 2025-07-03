@@ -2,10 +2,13 @@
 
 const CoordinateSanitizer = require('../src/index.js');
 
-console.log('Coordinate Sanitizer Examples\n');
+console.log('Coordinate Sanitizer Examples');
+console.log('='.repeat(50));
 
 // Example 1: Basic usage with default options
-console.log('Example 1: Basic usage (Aladin format output)');
+console.log('\n1. Basic usage (Aladin format output)');
+console.log('-'.repeat(40));
+
 const sanitizer = new CoordinateSanitizer();
 
 const testInputs = [
@@ -15,7 +18,6 @@ const testInputs = [
     '12h 34m 56.78s, +12° 34\' 56.78"',
     '12:34:56.78, +12:34:56.78',
     '123.456, -12.345',
-    '123456, -123456',
     'Andromeda Galaxy',
     '00h 42m 44.3s, +41° 16\' 09"',
     'Invalid input with no coordinates'
@@ -28,14 +30,14 @@ testInputs.forEach(input => {
     console.log(`  Output: "${result.coordinates}"`);
     if (result.error) console.log(`  Error: ${result.error}`);
     if (result.metadata) {
-        console.log(`  Input Format: ${result.metadata.inputFormat}`);
-        console.log(`  Output Format: ${result.metadata.outputFormat}`);
+        console.log(`  Format: ${result.metadata.inputFormat} -> ${result.metadata.outputFormat}`);
     }
-    console.log('  ---');
+    console.log();
 });
 
 // Example 2: Different output formats
-console.log('\nExample 2: Different output formats');
+console.log('\n2. Different output formats');
+console.log('-'.repeat(40));
 
 const formats = ['aladin', 'decimal', 'hms-dms'];
 const testCoord = '12h 34m 56.78s, +12° 34\' 56.78"';
@@ -48,7 +50,8 @@ formats.forEach(format => {
 });
 
 // Example 3: Custom precision
-console.log('\nExample 3: Custom precision for decimal output');
+console.log('\n3. Custom precision for decimal output');
+console.log('-'.repeat(40));
 
 const precisions = [2, 4, 6, 8];
 const precisionTestCoord = '12h 34m 56.123456s, +12° 34\' 56.123456"';
@@ -64,7 +67,8 @@ precisions.forEach(precision => {
 });
 
 // Example 4: Range validation
-console.log('\nExample 4: Range validation');
+console.log('\n4. Range validation');
+console.log('-'.repeat(40));
 
 const invalidCoords = [
     '25h 00m 00s, +00° 00\' 00"',  // RA > 24h
@@ -79,7 +83,7 @@ invalidCoords.forEach(coord => {
     console.log(`  Input: "${coord}"`);
     console.log(`  Valid: ${result.isValid}`);
     console.log(`  Error: ${result.error}`);
-    console.log('  ---');
+    console.log();
 });
 
 console.log('Testing with validation disabled:');
@@ -90,13 +94,28 @@ invalidCoords.forEach(coord => {
     console.log(`  Valid: ${result.isValid}`);
     console.log(`  Output: "${result.coordinates}"`);
     if (result.error) console.log(`  Error: ${result.error}`);
-    console.log('  ---');
+    console.log();
 });
 
-// Example 5: Integration with existing systems
-console.log('\nExample 5: Integration example');
+// Example 5: Using presets
+console.log('\n5. Using presets');
+console.log('-'.repeat(40));
 
-class AstronomyApp {
+const presets = ['aladin', 'decimal', 'loose', 'strict'];
+const presetTestCoord = '12h 34m 56s, +12° 34\' 56"';
+
+console.log(`Input coordinate: ${presetTestCoord}`);
+presets.forEach(preset => {
+    const presetSanitizer = CoordinateSanitizer.createPreset(preset);
+    const result = presetSanitizer.sanitizeCoordinates(presetTestCoord);
+    console.log(`  ${preset.toUpperCase()}: ${result.coordinates}`);
+});
+
+// Example 6: Integration with existing systems
+console.log('\n6. Integration example');
+console.log('-'.repeat(40));
+
+class TelescopeController {
     constructor() {
         this.sanitizer = new CoordinateSanitizer({
             outputFormat: 'aladin',
@@ -104,26 +123,26 @@ class AstronomyApp {
         });
     }
 
-    searchObject(input) {
+    gotoTarget(input) {
         const result = this.sanitizer.sanitizeCoordinates(input);
         
         if (!result.isValid) {
-            throw new Error(`Invalid coordinates: ${result.error}`);
+            throw new Error(`Invalid target: ${result.error}`);
         }
 
-        // Simulate API call or telescope control
-        console.log(`  Searching for: ${result.coordinates}`);
+        // Simulate telescope slewing
+        console.log(`  Slewing to: ${result.coordinates}`);
         console.log(`  Input type: ${result.metadata.inputFormat}`);
         
         return {
-            searchTerm: result.coordinates,
+            target: result.coordinates,
             inputType: result.metadata.inputFormat,
             success: true
         };
     }
 }
 
-const app = new AstronomyApp();
+const telescope = new TelescopeController();
 
 const testTargets = [
     'M31',
@@ -132,30 +151,31 @@ const testTargets = [
     '00h 42m 44.3s, +41° 16\' 09"'
 ];
 
-console.log('Testing successful searches:');
+console.log('Testing successful telescope commands:');
 testTargets.forEach(target => {
     try {
         console.log(`Target: "${target}"`);
-        const result = app.searchObject(target);
+        const result = telescope.gotoTarget(target);
         console.log(`  Success: ${result.success}`);
-        console.log('  ---');
+        console.log();
     } catch (error) {
         console.log(`  Error: ${error.message}`);
-        console.log('  ---');
+        console.log();
     }
 });
 
 console.log('Testing invalid coordinate (should fail):');
 try {
     console.log('Target: "25h 00m 00s, +00° 00\' 00""');
-    const result = app.searchObject('25h 00m 00s, +00° 00\' 00"');
+    const result = telescope.gotoTarget('25h 00m 00s, +00° 00\' 00"');
     console.log('  This should not print');
 } catch (error) {
     console.log(`  Expected error: ${error.message}`);
 }
 
-// Example 6: Batch processing
-console.log('\nExample 6: Batch processing');
+// Example 7: Batch processing
+console.log('\n7. Batch processing');
+console.log('-'.repeat(40));
 
 const batchInputs = [
     'M31',
@@ -171,9 +191,10 @@ const batchInputs = [
 ];
 
 console.log('Processing batch of coordinates:');
-const batchResults = batchInputs.map(input => {
+const batchResults = batchInputs.map((input, index) => {
     const result = sanitizer.sanitizeCoordinates(input);
     return {
+        id: index + 1,
         input: input,
         valid: result.isValid,
         output: result.coordinates,
@@ -183,17 +204,18 @@ const batchResults = batchInputs.map(input => {
 });
 
 console.log('\nBatch processing results:');
-batchResults.forEach((result, index) => {
-    console.log(`${index + 1}. Input: "${result.input}"`);
+batchResults.forEach(result => {
+    console.log(`${result.id}. Input: "${result.input}"`);
     console.log(`   Valid: ${result.valid}`);
     console.log(`   Output: "${result.output}"`);
     console.log(`   Type: ${result.type}`);
     if (result.error) console.log(`   Error: ${result.error}`);
-    console.log('   ---');
+    console.log();
 });
 
-// Example 7: Performance measurement
-console.log('\nExample 7: Performance test');
+// Example 8: Performance measurement
+console.log('\n8. Performance test');
+console.log('-'.repeat(40));
 
 const performanceTest = () => {
     const testCoords = [
@@ -223,8 +245,9 @@ const performanceTest = () => {
 
 performanceTest();
 
-// Example 8: Real astronomical objects
-console.log('\nExample 8: Real astronomical objects');
+// Example 9: Real astronomical objects
+console.log('\n9. Real astronomical objects');
+console.log('-'.repeat(40));
 
 const realObjects = [
     { name: 'Andromeda Galaxy (M31)', coords: '00h 42m 44.3s, +41° 16\' 09"' },
@@ -247,11 +270,12 @@ realObjects.forEach(obj => {
     const decimalSanitizer = new CoordinateSanitizer({ outputFormat: 'decimal' });
     const decimalResult = decimalSanitizer.sanitizeCoordinates(obj.coords);
     console.log(`    Decimal: ${decimalResult.coordinates}`);
-    console.log('    ---');
+    console.log();
 });
 
-// Example 9: Different coordinate separators
-console.log('\nExample 9: Different coordinate separators');
+// Example 10: Different coordinate separators
+console.log('\n10. Different coordinate separators');
+console.log('-'.repeat(40));
 
 const separatorTests = [
     '12h 34m 56s, +12° 34\' 56"',   // comma
@@ -266,11 +290,12 @@ separatorTests.forEach(coord => {
     console.log(`  Input: "${coord}"`);
     console.log(`  Valid: ${result.isValid}`);
     console.log(`  Output: "${result.coordinates}"`);
-    console.log('  ---');
+    console.log();
 });
 
-// Example 10: Error handling patterns
-console.log('\nExample 10: Error handling patterns');
+// Example 11: Error handling patterns
+console.log('\n11. Error handling patterns');
+console.log('-'.repeat(40));
 
 class RobustAstronomyApp {
     constructor() {
@@ -331,11 +356,12 @@ errorTestInputs.forEach(input => {
         console.log(`  Error: ${result.error}`);
         console.log(`  Suggestion: ${result.suggestion}`);
     }
-    console.log('  ---');
+    console.log();
 });
 
-// Example 11: Static methods
-console.log('\nExample 11: Static methods and utilities');
+// Example 12: Static methods and utilities
+console.log('\n12. Static methods and utilities');
+console.log('-'.repeat(40));
 
 console.log('Supported formats:');
 const supportedFormats = CoordinateSanitizer.getSupportedFormats();
@@ -348,5 +374,31 @@ supportedFormats.output.forEach(format => {
     console.log(`    - ${format}`);
 });
 
-console.log('\nExamples completed!');
+// Example 13: Mixed coordinate formats
+console.log('\n13. Mixed coordinate formats');
+console.log('-'.repeat(40));
+
+const mixedFormats = [
+    '12h 34m 56s, +12:34:56',        // HMS, colon-separated DEC
+    '12:34:56, +12° 34\' 56"',       // colon-separated RA, DMS
+    '12.5, +12° 30\' 00"',           // decimal RA, DMS
+    '12h 30m 00s, +12.5'             // HMS, decimal DEC
+];
+
+console.log('Testing mixed coordinate formats:');
+mixedFormats.forEach(coord => {
+    const result = sanitizer.sanitizeCoordinates(coord);
+    console.log(`  Input: "${coord}"`);
+    console.log(`  Valid: ${result.isValid}`);
+    if (result.isValid) {
+        console.log(`  Output: "${result.coordinates}"`);
+    } else {
+        console.log(`  Error: ${result.error}`);
+    }
+    console.log();
+});
+
+console.log('\n' + '='.repeat(50));
+console.log('Examples completed!');
 console.log('The coordinate sanitizer is ready for integration into your astronomy applications.');
+console.log('For more information, see the README.md file or visit the GitHub repository.');

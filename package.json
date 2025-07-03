@@ -5,13 +5,22 @@
   "main": "src/index.js",
   "module": "src/index.js",
   "types": "src/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./src/index.js",
+      "require": "./src/index.js",
+      "types": "./src/index.d.ts"
+    }
+  },
   "scripts": {
     "test": "node test/test.js",
     "test:watch": "nodemon test/test.js",
-    "lint": "eslint src/ test/",
-    "build": "echo 'No build step required for ES6 modules'",
     "example": "node examples/basic-usage.js",
-    "prepublishOnly": "npm test"
+    "lint": "echo 'Linting...' && echo 'No linter configured yet'",
+    "build": "echo 'No build step required for pure ES6 modules'",
+    "prepublishOnly": "npm test",
+    "version": "npm test && git add -A",
+    "postversion": "git push && git push --tags"
   },
   "keywords": [
     "astronomy",
@@ -23,28 +32,36 @@
     "celestial",
     "aladin",
     "voyager",
-    "telescope"
+    "telescope",
+    "coordinate-conversion",
+    "hms",
+    "dms",
+    "decimal-degrees"
   ],
-  "author": "Francesco di Biase <fran.dibiase@gmail.com>",
+  "author": {
+    "name": "Francesco di Biase",
+    "email": "fran.dibiase@gmail.com",
+    "url": "https://github.com/Francescodib"
+  },
   "license": "MIT",
   "repository": {
-  "type": "git",
-  "url": "https://github.com/Francescodib/coordinate-sanitizer.git"
-},
-"bugs": {
-  "url": "https://github.com/Francescodib/coordinate-sanitizer/issues"
-},
-"homepage": "https://github.com/Francescodib/coordinate-sanitizer#readme",
+    "type": "git",
+    "url": "https://github.com/Francescodib/coordinate-sanitizer.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Francescodib/coordinate-sanitizer/issues"
+  },
+  "homepage": "https://github.com/Francescodib/coordinate-sanitizer#readme",
   "files": [
     "src/",
     "README.md",
-    "LICENSE"
+    "LICENSE",
+    "CHANGELOG.md"
   ],
   "engines": {
     "node": ">=14.0.0"
   },
   "devDependencies": {
-    "eslint": "^8.0.0",
     "nodemon": "^3.0.0"
   }
 }

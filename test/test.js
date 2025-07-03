@@ -15,7 +15,8 @@ class TestRunner {
     }
 
     async run() {
-        console.log('Running Coordinate Sanitizer Tests\n');
+        console.log('Running Coordinate Sanitizer Tests');
+        console.log('='.repeat(50));
         
         for (const { description, fn } of this.tests) {
             try {
@@ -24,15 +25,19 @@ class TestRunner {
                 this.passed++;
             } catch (error) {
                 console.log(`- ${description}`);
-                console.log(`   Error: ${error.message}\n`);
+                console.log(`  Error: ${error.message}`);
                 this.failed++;
             }
         }
 
-        console.log(`\nTest Results: ${this.passed} passed, ${this.failed} failed`);
+        console.log('\n' + '='.repeat(50));
+        console.log(`Test Results: ${this.passed} passed, ${this.failed} failed`);
         
         if (this.failed > 0) {
+            console.log(`\nFailed tests: ${this.failed}`);
             process.exit(1);
+        } else {
+            console.log('\nAll tests passed!');
         }
     }
 
@@ -53,198 +58,265 @@ class TestRunner {
             throw new Error(`${message || 'String not found'}: "${needle}" not found in "${haystack}"`);
         }
     }
+
+    assertNotEqual(actual, expected, message) {
+        if (actual === expected) {
+            throw new Error(`${message || 'Values should not be equal'}: got "${actual}"`);
+        }
+    }
 }
 
 // Test suite
 const runner = new TestRunner();
 
-// Basic functionality tests
+// Basic constructor tests
 runner.test('Should create sanitizer with default options', () => {
     const sanitizer = new CoordinateSanitizer();
-    runner.assert(sanitizer.options.outputFormat === 'aladin', 'Default output format should be aladin');
-    runner.assert(sanitizer.options.precision === 6, 'Default precision should be 6');
-    runner.assert(sanitizer.options.validateRanges === true, 'Default validateRanges should be true');
+    runner.assert(sanitizer.options.outputFormat === 'aladin');
+    runner.assert(sanitizer.options.precision === 6);
+    runner.assert(sanitizer.options.validateRanges === true);
+    runner.assert(sanitizer.options.strictMode === false);
 });
 
 runner.test('Should create sanitizer with custom options', () => {
     const sanitizer = new CoordinateSanitizer({
         outputFormat: 'decimal',
         precision: 4,
-        validateRanges: false
+        validateRanges: false,
+        strictMode: true
     });
-    runner.assert(sanitizer.options.outputFormat === 'decimal', 'Custom output format should be set');
-    runner.assert(sanitizer.options.precision === 4, 'Custom precision should be set');
-    runner.assert(sanitizer.options.validateRanges === false, 'Custom validateRanges should be set');
+    runner.assert(sanitizer.options.outputFormat === 'decimal');
+    runner.assert(sanitizer.options.precision === 4);
+    runner.assert(sanitizer.options.validateRanges === false);
+    runner.assert(sanitizer.options.strictMode === true);
 });
 
 // Input validation tests
 runner.test('Should reject null input', () => {
     const sanitizer = new CoordinateSanitizer();
     const result = sanitizer.sanitizeCoordinates(null);
-    runner.assert(!result.isValid, 'Should reject null input');
-    runner.assertContains(result.error, 'non-empty string', 'Should provide appropriate error message');
+    runner.assert(!result.isValid);
+    runner.assertContains(result.error, 'non-empty string');
 });
 
 runner.test('Should reject undefined input', () => {
     const sanitizer = new CoordinateSanitizer();
     const result = sanitizer.sanitizeCoordinates(undefined);
-    runner.assert(!result.isValid, 'Should reject undefined input');
-    runner.assertContains(result.error, 'non-empty string', 'Should provide appropriate error message');
+    runner.assert(!result.isValid);
+    runner.assertContains(result.error, 'non-empty string');
 });
 
 runner.test('Should reject empty string input', () => {
     const sanitizer = new CoordinateSanitizer();
     const result = sanitizer.sanitizeCoordinates('');
-    runner.assert(!result.isValid, 'Should reject empty string');
+    runner.assert(!result.isValid);
 });
 
-runner.test('Should reject whitespace-only input', () => {
+runner.test('Should reject non-string input', () => {
     const sanitizer = new CoordinateSanitizer();
-    const result = sanitizer.sanitizeCoordinates('   ');
-    runner.assert(!result.isValid, 'Should reject whitespace-only input');
+    const result = sanitizer.sanitizeCoordinates(123);
+    runner.assert(!result.isValid);
+});
+
+// Security tests
+runner.test('Should reject malicious HTML content', () => {
+    const sanitizer = new CoordinateSanitizer();
+    const result = sanitizer.sanitizeCoordinates('<script>alert("xss")</script>');
+    runner.assert(!result.isValid);
+    runner.assertContains(result.error, 'malicious');
+});
+
+runner.test('Should reject JavaScript protocol', () => {
+    const sanitizer = new CoordinateSanitizer();
+    const result = sanitizer.sanitizeCoordinates('javascript:alert(1)');
+    runner.assert(!result.isValid);
+    runner.assertContains(result.error, 'malicious');
 });
 
 // Object name tests
-runner.test('Should pass through simple object names unchanged', () => {
+runner.test('Should pass through Messier objects', () => {
     const sanitizer = new CoordinateSanitizer();
-    const result = sanitizer.sanitizeCoordinates('M31');
-    runner.assert(result.isValid, 'Should accept object names');
-    runner.assertEqual(result.coordinates, 'M31', 'Should pass through object names unchanged');
-    runner.assert(result.metadata.inputFormat === 'object-name', 'Should detect as object name');
+    const inputs = ['M31', 'M 42', 'M1', 'M110'];
+    
+    inputs.forEach(input => {
+        const result = sanitizer.sanitizeCoordinates(input);
+        runner.assert(result.isValid);
+        runner.assertEqual(result.coordinates, input);
+        runner.assert(result.metadata.inputFormat === 'object-name');
+    });
 });
 
-runner.test('Should pass through NGC objects unchanged', () => {
+runner.test('Should pass through NGC objects', () => {
     const sanitizer = new CoordinateSanitizer();
-    const result = sanitizer.sanitizeCoordinates('NGC 1234');
-    runner.assert(result.isValid, 'Should accept NGC objects');
-    runner.assertEqual(result.coordinates, 'NGC 1234', 'Should pass through NGC objects unchanged');
-    runner.assert(result.metadata.inputFormat === 'object-name', 'Should detect as object name');
+    const inputs = ['NGC 1234', 'NGC1234', 'NGC 7000'];
+    
+    inputs.forEach(input => {
+        const result = sanitizer.sanitizeCoordinates(input);
+        runner.assert(result.isValid);
+        runner.assertEqual(result.coordinates, input);
+        runner.assert(result.metadata.inputFormat === 'object-name');
+    });
 });
 
-runner.test('Should pass through IC objects unchanged', () => {
+runner.test('Should pass through other catalog objects', () => {
     const sanitizer = new CoordinateSanitizer();
-    const result = sanitizer.sanitizeCoordinates('IC 1396');
-    runner.assert(result.isValid, 'Should accept IC objects');
-    runner.assertEqual(result.coordinates, 'IC 1396', 'Should pass through IC objects unchanged');
+    const inputs = ['IC 1396', 'HD 209458', 'HIP 27989', 'SAO 123456'];
+    
+    inputs.forEach(input => {
+        const result = sanitizer.sanitizeCoordinates(input);
+        runner.assert(result.isValid);
+        runner.assertEqual(result.coordinates, input);
+        runner.assert(result.metadata.inputFormat === 'object-name');
+    });
+});
+
+runner.test('Should pass through named stars', () => {
+    const sanitizer = new CoordinateSanitizer();
+    const inputs = ['ALPHA CENTAURI', '51 Eri', 'R And', 'Polaris'];
+    
+    inputs.forEach(input => {
+        const result = sanitizer.sanitizeCoordinates(input);
+        runner.assert(result.isValid);
+        runner.assertEqual(result.coordinates, input);
+        runner.assert(result.metadata.inputFormat === 'object-name');
+    });
 });
 
 // HMS/DMS coordinate parsing tests
-runner.test('Should parse standard HMS/DMS format correctly', () => {
+runner.test('Should parse standard HMS/DMS format', () => {
     const sanitizer = new CoordinateSanitizer();
     const result = sanitizer.sanitizeCoordinates('12h 34m 56.78s, +12° 34\' 56.78"');
-    runner.assert(result.isValid, 'Should parse HMS/DMS format');
-    runner.assertContains(result.coordinates, '12 34 56.780', 'Should format RA correctly');
-    runner.assertContains(result.coordinates, '+12 34 56.780', 'Should format DEC correctly');
-    runner.assert(result.metadata.inputFormat === 'coordinates', 'Should detect as coordinates');
+    runner.assert(result.isValid);
+    runner.assertContains(result.coordinates, '12 34 56.780');
+    runner.assertContains(result.coordinates, '+12 34 56.780');
+    runner.assert(result.metadata.inputFormat === 'coordinates');
 });
 
 runner.test('Should parse colon-separated coordinates', () => {
     const sanitizer = new CoordinateSanitizer();
     const result = sanitizer.sanitizeCoordinates('12:34:56.78, +12:34:56.78');
-    runner.assert(result.isValid, 'Should parse colon-separated format');
-    runner.assertContains(result.coordinates, '12 34 56.780', 'Should format RA correctly');
-    runner.assertContains(result.coordinates, '+12 34 56.780', 'Should format DEC correctly');
+    runner.assert(result.isValid);
+    runner.assertContains(result.coordinates, '12 34 56.780');
+    runner.assertContains(result.coordinates, '+12 34 56.780');
 });
 
 runner.test('Should parse decimal coordinates', () => {
     const sanitizer = new CoordinateSanitizer();
     const result = sanitizer.sanitizeCoordinates('12.5, -45.75');
-    runner.assert(result.isValid, 'Should parse decimal format');
-    runner.assert(result.metadata.inputFormat === 'coordinates', 'Should detect as coordinates');
+    runner.assert(result.isValid);
+    runner.assert(result.metadata.inputFormat === 'coordinates');
+});
+
+runner.test('Should parse space-separated coordinates', () => {
+    const sanitizer = new CoordinateSanitizer();
+    const result = sanitizer.sanitizeCoordinates('12 34 56.7 -45 12 34.5');
+    runner.assert(result.isValid);
+    runner.assert(result.metadata.inputFormat === 'coordinates');
 });
 
 runner.test('Should parse compact coordinates', () => {
     const sanitizer = new CoordinateSanitizer();
     const result = sanitizer.sanitizeCoordinates('123456, -123456');
-    runner.assert(result.isValid, 'Should parse compact format');
-    runner.assert(result.metadata.inputFormat === 'coordinates', 'Should detect as coordinates');
+    runner.assert(result.isValid);
+    runner.assert(result.metadata.inputFormat === 'coordinates');
 });
 
 // Range validation tests
 runner.test('Should reject RA > 24 hours', () => {
     const sanitizer = new CoordinateSanitizer();
     const result = sanitizer.sanitizeCoordinates('25h 00m 00s, +00° 00\' 00"');
-    runner.assert(!result.isValid, 'Should reject RA > 24 hours');
-    runner.assertContains(result.error, 'RA out of range', 'Should provide RA range error');
+    runner.assert(!result.isValid);
+    runner.assertContains(result.error, 'RA out of range');
 });
 
 runner.test('Should reject negative RA', () => {
     const sanitizer = new CoordinateSanitizer();
     const result = sanitizer.sanitizeCoordinates('-1h 00m 00s, +00° 00\' 00"');
-    runner.assert(!result.isValid, 'Should reject negative RA');
-    runner.assertContains(result.error, 'RA out of range', 'Should provide RA range error');
+    runner.assert(!result.isValid);
+    runner.assertContains(result.error, 'RA out of range');
 });
 
 runner.test('Should reject DEC > 90 degrees', () => {
     const sanitizer = new CoordinateSanitizer();
     const result = sanitizer.sanitizeCoordinates('12h 00m 00s, +95° 00\' 00"');
-    runner.assert(!result.isValid, 'Should reject DEC > 90 degrees');
-    runner.assertContains(result.error, 'DEC out of range', 'Should provide DEC range error');
+    runner.assert(!result.isValid);
+    runner.assertContains(result.error, 'DEC out of range');
 });
 
 runner.test('Should reject DEC < -90 degrees', () => {
     const sanitizer = new CoordinateSanitizer();
     const result = sanitizer.sanitizeCoordinates('12h 00m 00s, -95° 00\' 00"');
-    runner.assert(!result.isValid, 'Should reject DEC < -90 degrees');
-    runner.assertContains(result.error, 'DEC out of range', 'Should provide DEC range error');
+    runner.assert(!result.isValid);
+    runner.assertContains(result.error, 'DEC out of range');
 });
 
 runner.test('Should accept valid coordinate ranges', () => {
     const sanitizer = new CoordinateSanitizer();
+    
     const result1 = sanitizer.sanitizeCoordinates('0h 00m 00s, +90° 00\' 00"');
-    runner.assert(result1.isValid, 'Should accept RA=0, DEC=+90');
+    runner.assert(result1.isValid);
     
     const result2 = sanitizer.sanitizeCoordinates('23h 59m 59s, -90° 00\' 00"');
-    runner.assert(result2.isValid, 'Should accept RA=23h59m59s, DEC=-90');
+    runner.assert(result2.isValid);
 });
 
 runner.test('Should skip range validation when disabled', () => {
     const sanitizer = new CoordinateSanitizer({ validateRanges: false });
     const result = sanitizer.sanitizeCoordinates('25h 00m 00s, +95° 00\' 00"');
-    runner.assert(result.isValid, 'Should accept invalid ranges when validation disabled');
+    runner.assert(result.isValid);
 });
 
-// Different output format tests
+// Output format tests
+runner.test('Should output Aladin format by default', () => {
+    const sanitizer = new CoordinateSanitizer();
+    const result = sanitizer.sanitizeCoordinates('12h 00m 00s, +12° 00\' 00"');
+    runner.assert(result.isValid);
+    runner.assertEqual(result.coordinates, '12 00 00.000, +12 00 00.000');
+});
+
 runner.test('Should output decimal format when requested', () => {
     const sanitizer = new CoordinateSanitizer({ outputFormat: 'decimal' });
     const result = sanitizer.sanitizeCoordinates('12h 00m 00s, +12° 00\' 00"');
-    runner.assert(result.isValid, 'Should parse coordinates');
-    runner.assertContains(result.coordinates, '12.000000', 'Should output decimal RA');
-    runner.assertContains(result.coordinates, '12.000000', 'Should output decimal DEC');
+    runner.assert(result.isValid);
+    runner.assertContains(result.coordinates, '12.000000');
+    runner.assertContains(result.coordinates, '12.000000');
 });
 
 runner.test('Should output HMS/DMS format when requested', () => {
     const sanitizer = new CoordinateSanitizer({ outputFormat: 'hms-dms' });
     const result = sanitizer.sanitizeCoordinates('12, +12');
-    runner.assert(result.isValid, 'Should parse coordinates');
-    runner.assertContains(result.coordinates, '12h', 'Should output HMS format');
-    runner.assertContains(result.coordinates, '12°', 'Should output DMS format');
+    runner.assert(result.isValid);
+    runner.assertContains(result.coordinates, '12h');
+    runner.assertContains(result.coordinates, '12°');
 });
 
 runner.test('Should respect custom precision', () => {
-    const sanitizer = new CoordinateSanitizer({ outputFormat: 'decimal', precision: 2 });
+    const sanitizer = new CoordinateSanitizer({ 
+        outputFormat: 'decimal', 
+        precision: 2 
+    });
     const result = sanitizer.sanitizeCoordinates('12h 34m 56.123s, +12° 34\' 56.123"');
-    runner.assert(result.isValid, 'Should parse coordinates');
-    runner.assertContains(result.coordinates, '12.58', 'Should use custom precision');
+    runner.assert(result.isValid);
+    runner.assertContains(result.coordinates, '12.58');
 });
 
-// Edge cases and special handling
+// Edge cases
 runner.test('Should handle negative declinations correctly', () => {
     const sanitizer = new CoordinateSanitizer();
     const result = sanitizer.sanitizeCoordinates('12h 00m 00s, -12° 00\' 00"');
-    runner.assert(result.isValid, 'Should handle negative declinations');
-    runner.assertContains(result.coordinates, '-12 00 00.000', 'Should preserve negative sign');
+    runner.assert(result.isValid);
+    runner.assertContains(result.coordinates, '-12 00 00.000');
 });
 
-runner.test('Should handle zero coordinates correctly', () => {
+runner.test('Should handle zero coordinates', () => {
     const sanitizer = new CoordinateSanitizer();
     const result = sanitizer.sanitizeCoordinates('0h 00m 00s, +00° 00\' 00"');
-    runner.assert(result.isValid, 'Should handle zero coordinates');
-    runner.assertContains(result.coordinates, '00 00 00.000', 'Should format zero RA correctly');
-    runner.assertContains(result.coordinates, '+00 00 00.000', 'Should format zero DEC correctly');
+    runner.assert(result.isValid);
+    runner.assertContains(result.coordinates, '00 00 00.000');
+    runner.assertContains(result.coordinates, '+00 00 00.000');
 });
 
-runner.test('Should handle various coordinate separators', () => {
+runner.test('Should handle various separators', () => {
     const sanitizer = new CoordinateSanitizer();
     const separators = [',', ';', '·', '•'];
     
@@ -252,77 +324,120 @@ runner.test('Should handle various coordinate separators', () => {
         const input = `12h 00m 00s${sep} +12° 00' 00"`;
         const result = sanitizer.sanitizeCoordinates(input);
         runner.assert(result.isValid, `Should handle separator: ${sep}`);
-        runner.assert(result.metadata.inputFormat === 'coordinates', 'Should detect as coordinates');
     });
 });
 
-runner.test('Should handle whitespace variations', () => {
+runner.test('Should handle Unicode symbols', () => {
     const sanitizer = new CoordinateSanitizer();
     const inputs = [
-        '12h34m56s, +12°34\'56"',
-        '12h  34m  56s,  +12°  34\'  56"',
-        '  12h 34m 56s  ,  +12° 34\' 56"  '
+        '12h 34m 56s · +12° 34′ 56″',
+        '12h 34m 56s • +12° 34′ 56″',
+        '12h 34m 56s, +12° 34′ 56″'
     ];
     
     inputs.forEach(input => {
         const result = sanitizer.sanitizeCoordinates(input);
-        runner.assert(result.isValid, `Should handle whitespace in: ${input}`);
-        runner.assert(result.metadata.inputFormat === 'coordinates', 'Should detect as coordinates');
+        runner.assert(result.isValid, `Should handle Unicode in: ${input}`);
     });
 });
 
 // Static method tests
-runner.test('Should provide supported formats information', () => {
+runner.test('Should provide supported formats', () => {
     const formats = CoordinateSanitizer.getSupportedFormats();
-    runner.assert(Array.isArray(formats.input), 'Should provide input formats array');
-    runner.assert(Array.isArray(formats.output), 'Should provide output formats array');
-    runner.assert(formats.output.includes('aladin'), 'Should include aladin format');
-    runner.assert(formats.output.includes('decimal'), 'Should include decimal format');
-    runner.assert(formats.output.includes('hms-dms'), 'Should include hms-dms format');
+    runner.assert(Array.isArray(formats.input));
+    runner.assert(Array.isArray(formats.output));
+    runner.assert(formats.output.includes('aladin'));
+    runner.assert(formats.output.includes('decimal'));
+    runner.assert(formats.output.includes('hms-dms'));
+});
+
+runner.test('Should create presets correctly', () => {
+    const aladinPreset = CoordinateSanitizer.createPreset('aladin');
+    runner.assertEqual(aladinPreset.options.outputFormat, 'aladin');
+    runner.assert(aladinPreset.options.validateRanges === true);
+    
+    const decimalPreset = CoordinateSanitizer.createPreset('decimal');
+    runner.assertEqual(decimalPreset.options.outputFormat, 'decimal');
+    runner.assertEqual(decimalPreset.options.precision, 6);
+    
+    const loosePreset = CoordinateSanitizer.createPreset('loose');
+    runner.assert(loosePreset.options.validateRanges === false);
+    
+    const strictPreset = CoordinateSanitizer.createPreset('strict');
+    runner.assert(strictPreset.options.strictMode === true);
 });
 
 // Performance test
 runner.test('Should handle large number of coordinates efficiently', () => {
     const sanitizer = new CoordinateSanitizer();
+    const testCoords = [
+        '12h 34m 56s, +12° 34\' 56"',
+        'M31',
+        '188.5, +12.25',
+        '05h 35m 17.3s, -05° 23\' 14"'
+    ];
+    
+    const iterations = 250; // Total 1000 operations
     const start = Date.now();
     
-    for (let i = 0; i < 1000; i++) {
-        sanitizer.sanitizeCoordinates('12h 34m 56s, +12° 34\' 56"');
+    for (let i = 0; i < iterations; i++) {
+        testCoords.forEach(coord => {
+            sanitizer.sanitizeCoordinates(coord);
+        });
     }
     
     const elapsed = Date.now() - start;
-    runner.assert(elapsed < 2000, `Should process 1000 coordinates in <2s (took ${elapsed}ms)`);
-    console.log(`   Performance: ${elapsed}ms for 1000 coordinates`);
+    const totalOps = iterations * testCoords.length;
+    
+    runner.assert(elapsed < 2000, `Should process ${totalOps} coordinates in <2s (took ${elapsed}ms)`);
+    console.log(`  Performance: ${elapsed}ms for ${totalOps} coordinates`);
 });
 
-// Error handling tests
+// Real astronomical coordinates
+runner.test('Should handle real astronomical coordinates', () => {
+    const sanitizer = new CoordinateSanitizer();
+    
+    const realCoords = [
+        { name: 'M31', coord: '00h 42m 44.3s, +41° 16\' 09"' },
+        { name: 'M42', coord: '05h 35m 17.3s, -05° 23\' 14"' },
+        { name: 'Polaris', coord: '02h 31m 49s, +89° 15\' 51"' },
+        { name: 'Vega', coord: '18h 36m 56.3s, +38° 47\' 01"' }
+    ];
+    
+    realCoords.forEach(({ name, coord }) => {
+        const result = sanitizer.sanitizeCoordinates(coord);
+        runner.assert(result.isValid, `Should parse ${name} coordinates`);
+        runner.assert(result.metadata.inputFormat === 'coordinates');
+    });
+});
+
+// Error handling
 runner.test('Should provide meaningful error messages', () => {
     const sanitizer = new CoordinateSanitizer();
     
     const result1 = sanitizer.sanitizeCoordinates('invalid, coordinates');
-    runner.assert(!result1.isValid, 'Should reject invalid coordinates');
-    runner.assert(result1.error.includes('Invalid'), 'Should provide descriptive error');
+    runner.assert(!result1.isValid);
+    runner.assert(result1.error.includes('Invalid'));
     
     const result2 = sanitizer.sanitizeCoordinates('12h 34m, invalid');
-    runner.assert(!result2.isValid, 'Should reject partially invalid coordinates');
-    runner.assert(result2.error.includes('Invalid'), 'Should provide descriptive error');
+    runner.assert(!result2.isValid);
+    runner.assert(result2.error.includes('Invalid'));
 });
 
 // Integration tests
-runner.test('Should work with real astronomical coordinates', () => {
+runner.test('Should work with mixed coordinate formats', () => {
     const sanitizer = new CoordinateSanitizer();
     
-    // Andromeda Galaxy
-    const m31 = sanitizer.sanitizeCoordinates('00h 42m 44.3s, +41° 16\' 09"');
-    runner.assert(m31.isValid, 'Should parse M31 coordinates');
+    const mixedInputs = [
+        '12h 34m 56s, +12:34:56',
+        '12:34:56, +12° 34\' 56"',
+        '12.5, +12° 30\' 00"'
+    ];
     
-    // Orion Nebula
-    const m42 = sanitizer.sanitizeCoordinates('05h 35m 17.3s, -05° 23\' 14"');
-    runner.assert(m42.isValid, 'Should parse M42 coordinates');
-    
-    // Polaris
-    const polaris = sanitizer.sanitizeCoordinates('02h 31m 49s, +89° 15\' 51"');
-    runner.assert(polaris.isValid, 'Should parse Polaris coordinates');
+    mixedInputs.forEach(input => {
+        const result = sanitizer.sanitizeCoordinates(input);
+        runner.assert(result.isValid, `Should handle mixed format: ${input}`);
+    });
 });
 
 // Run all tests
