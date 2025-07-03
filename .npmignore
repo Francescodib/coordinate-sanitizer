@@ -1,0 +1,9 @@
+test/
+examples/
+.github/
+.gitignore
+.eslintrc.js
+.nyc_output/
+coverage/
+*.test.js
+*.spec.js

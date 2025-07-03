@@ -1,0 +1,50 @@
+{
+  "name": "coordinate-sanitizer",
+  "version": "1.0.0",
+  "description": "Flexible coordinate parser and sanitizer for astronomical coordinates. Handles various coordinate formats and converts them to standardized formats.",
+  "main": "src/index.js",
+  "module": "src/index.js",
+  "types": "src/index.d.ts",
+  "scripts": {
+    "test": "node test/test.js",
+    "test:watch": "nodemon test/test.js",
+    "lint": "eslint src/ test/",
+    "build": "echo 'No build step required for ES6 modules'",
+    "example": "node examples/basic-usage.js",
+    "prepublishOnly": "npm test"
+  },
+  "keywords": [
+    "astronomy",
+    "coordinates",
+    "parser",
+    "sanitizer",
+    "ra",
+    "dec",
+    "celestial",
+    "aladin",
+    "voyager",
+    "telescope"
+  ],
+  "author": "Francesco di Biase <fran.dibiase@gmail.com>",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/yourusername/coordinate-sanitizer.git"
+  },
+  "bugs": {
+    "url": "https://github.com/yourusername/coordinate-sanitizer/issues"
+  },
+  "homepage": "https://github.com/yourusername/coordinate-sanitizer#readme",
+  "files": [
+    "src/",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=14.0.0"
+  },
+  "devDependencies": {
+    "eslint": "^8.0.0",
+    "nodemon": "^3.0.0"
+  }
+}
