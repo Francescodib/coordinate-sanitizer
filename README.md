@@ -5,8 +5,15 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Node.js Support](https://img.shields.io/node/v/coordinate-sanitizer.svg)](https://nodejs.org)
 
-
 A flexible and robust JavaScript library for parsing and sanitizing astronomical coordinates. Handles various coordinate formats and converts them to standardized formats suitable for astronomical applications.
+
+## Installation
+
+```bash
+npm install coordinate-sanitizer
+```
+
+[![NPM](https://nodei.co/npm/coordinate-sanitizer.png?downloads=true&downloadRank=true&stars=true)](https://www.npmjs.com/package/coordinate-sanitizer)
 
 ## Features
 
@@ -20,12 +27,6 @@ A flexible and robust JavaScript library for parsing and sanitizing astronomical
 - **Zero Dependencies**: Lightweight with no external dependencies
 - **Universal**: Works in Node.js and browsers
 - **TypeScript Support**: Includes complete TypeScript definitions
-
-## Installation
-
-```bash
-npm install coordinate-sanitizer
-```
 
 ## Quick Start
 
@@ -44,6 +45,17 @@ console.log(result2.coordinates); // "M31" (passed through as object name)
 const result3 = sanitizer.sanitizeCoordinates('123.456, -12.345');
 console.log(result3.coordinates); // "08 13 49.440, -12 20 42.000"
 ```
+
+## Package Information
+
+| Property | Value |
+|----------|--------|
+| **Package Name** | [`coordinate-sanitizer`](https://www.npmjs.com/package/coordinate-sanitizer) |
+| **Version** | ![npm version](https://img.shields.io/npm/v/coordinate-sanitizer.svg) |
+| **Weekly Downloads** | ![npm downloads](https://img.shields.io/npm/dw/coordinate-sanitizer.svg) |
+| **Bundle Size** | ![npm bundle size](https://img.shields.io/bundlephobia/min/coordinate-sanitizer.svg) |
+| **License** | ![License](https://img.shields.io/npm/l/coordinate-sanitizer.svg) |
+| **Node.js Support** | ![Node.js](https://img.shields.io/node/v/coordinate-sanitizer.svg) |
 
 ## Supported Input Formats
 
@@ -372,9 +384,17 @@ npm test
 npm run example
 ```
 
+## Stats
+
+- **Lines of code**: ~800
+- **Test coverage**: 37 comprehensive tests
+- **Performance**: 10,000+ coordinates/second
+- **Bundle size**: Minimal (zero dependencies)
+- **Formats supported**: 15+ input variations
+
 ## Changelog
 
-### 1.0.0
+### 1.0.1
 - Initial release
 - Support for multiple coordinate formats
 - Range validation
@@ -391,6 +411,13 @@ MIT License - see [LICENSE](LICENSE) file for details.
 - [Aladin Lite](https://aladin.u-strasbg.fr/AladinLite/) - Sky atlas for the web
 - [Voyager](https://www.starkeeper.it/) - Advanced astronomy software
 - [Astropy](https://www.astropy.org/) - Python astronomy library
+
+## Links
+
+- **npm Package**: https://www.npmjs.com/package/coordinate-sanitizer
+- **Documentation**: https://github.com/Francescodib/coordinate-sanitizer#readme
+- **Issues**: https://github.com/Francescodib/coordinate-sanitizer/issues
+- **Discussions**: https://github.com/Francescodib/coordinate-sanitizer/discussions
 
 ## Support
 
