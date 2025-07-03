@@ -1,5 +1,11 @@
 # Coordinate Sanitizer
 
+[![npm version](https://badge.fury.io/js/coordinate-sanitizer.svg)](https://badge.fury.io/js/coordinate-sanitizer)
+[![npm downloads](https://img.shields.io/npm/dm/coordinate-sanitizer.svg)](https://www.npmjs.com/package/coordinate-sanitizer)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Node.js Support](https://img.shields.io/node/v/coordinate-sanitizer.svg)](https://nodejs.org)
+
+
 A flexible and robust JavaScript library for parsing and sanitizing astronomical coordinates. Handles various coordinate formats and converts them to standardized formats suitable for astronomical applications.
 
 ## Features
