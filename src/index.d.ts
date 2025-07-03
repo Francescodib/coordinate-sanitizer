@@ -103,4 +103,4 @@ export default class CoordinateSanitizer {
 /**
  * Export for CommonJS environments
  */
-export = CoordinateSanitizer;
+export = CoordinateSanitizer; 
