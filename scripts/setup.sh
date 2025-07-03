@@ -189,7 +189,7 @@ echo "  - API Documentation: ./docs/API.md"
 echo "  - Examples: ./examples/"
 echo "  - Tests: ./test/"
 echo ""
-echo "Happy coding! 🚀"
+echo "Setup completato!"
 
 # Opzionale: apri l'editor
 echo ""

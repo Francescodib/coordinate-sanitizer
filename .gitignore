@@ -107,6 +107,9 @@ pids
 *.pid
 *.seed
 
+#PDF files
+*.pdf
+
 # Coverage directory used by tools like istanbul
 coverage
 
