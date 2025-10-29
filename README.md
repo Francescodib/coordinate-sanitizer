@@ -409,7 +409,6 @@ MIT License - see [LICENSE](LICENSE) file for details.
 ## Related Projects
 
 - [Aladin Lite](https://aladin.u-strasbg.fr/AladinLite/) - Sky atlas for the web
-- [Voyager](https://www.starkeeper.it/) - Advanced astronomy software
 - [Astropy](https://www.astropy.org/) - Python astronomy library
 
 ## Links
