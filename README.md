@@ -394,6 +394,11 @@ npm run example
 
 ## Changelog
 
+### 1.0.3
+- Fixed bug where negative declination coordinates starting with -00 (e.g., `-00 58 20.000`) would lose their negative sign
+- Improved sign handling in coordinate formatting functions
+- Added comprehensive test cases for -00 degree edge case
+
 ### 1.0.1
 - Initial release
 - Support for multiple coordinate formats
