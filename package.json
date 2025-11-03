@@ -1,6 +1,6 @@
 {
   "name": "coordinate-sanitizer",
-  "version": "1.0.1",
+  "version": "1.0.3",
   "description": "Flexible coordinate parser and sanitizer for astronomical coordinates. Handles various coordinate formats and converts them to standardized formats.",
   "main": "src/index.js",
   "module": "src/index.js",

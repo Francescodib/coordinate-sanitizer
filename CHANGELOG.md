@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.3] - 2025-01-03
+
+### Fixed
+- Fixed bug where negative declination coordinates starting with -00 (e.g., `-00 58 20.000`) would lose their negative sign and be converted to positive coordinates. The sign is now correctly preserved in all cases.
+- Improved sign handling in coordinate formatting functions to ensure negative values are always correctly displayed.
+
+### Changed
+- Enhanced `dmsToDecimal` function to accept an optional `isNegative` parameter for explicit sign control.
+- Updated `parseDEC` function to detect negative sign from the original string before parsing.
+- Modified `formatAladin` and `formatHMSDMS` functions to always display explicit sign (+ or -) for declination values.
+
+### Added
+- Added comprehensive test cases for negative declination with -00 degrees in various formats.
+
 ## [1.0.0] - 2025-01-03
 
 ### Added

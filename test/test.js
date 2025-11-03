@@ -308,6 +308,35 @@ runner.test('Should handle negative declinations correctly', () => {
     runner.assertContains(result.coordinates, '-12 00 00.000');
 });
 
+runner.test('Should handle negative declination with -00 degrees correctly', () => {
+    const sanitizer = new CoordinateSanitizer();
+    // Test case from bug report
+    const result = sanitizer.sanitizeCoordinates('16 37 13.000, -00 58 20.000');
+    runner.assert(result.isValid, 'Should parse coordinates with -00 degrees');
+    runner.assertContains(result.coordinates, '16 37 13.000', 'RA should be correct');
+    runner.assertContains(result.coordinates, '-00 58 20.000', 'DEC should preserve negative sign');
+    runner.assert(result.coordinates.includes('-00') || result.coordinates.includes('- 00'), 'Should contain negative sign for -00 degrees');
+});
+
+runner.test('Should handle negative declination -00 in various formats', () => {
+    const sanitizer = new CoordinateSanitizer();
+
+    // Space-separated format
+    const result1 = sanitizer.sanitizeCoordinates('16 37 13, -00 58 20');
+    runner.assert(result1.isValid);
+    runner.assert(result1.metadata.dec.decimal < 0, 'Decimal should be negative');
+
+    // HMS/DMS format with symbols
+    const result2 = sanitizer.sanitizeCoordinates('16h 37m 13s, -00° 58\' 20"');
+    runner.assert(result2.isValid);
+    runner.assert(result2.metadata.dec.decimal < 0, 'Decimal should be negative');
+
+    // Colon-separated format
+    const result3 = sanitizer.sanitizeCoordinates('16:37:13, -00:58:20');
+    runner.assert(result3.isValid);
+    runner.assert(result3.metadata.dec.decimal < 0, 'Decimal should be negative');
+});
+
 runner.test('Should handle zero coordinates', () => {
     const sanitizer = new CoordinateSanitizer();
     const result = sanitizer.sanitizeCoordinates('0h 00m 00s, +00° 00\' 00"');
