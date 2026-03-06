@@ -7,6 +7,11 @@
 
 A flexible and robust JavaScript library for parsing and sanitizing astronomical coordinates. Handles various coordinate formats and converts them to standardized formats suitable for astronomical applications.
 
+<p align="center">
+    <img src="https://raw.githubusercontent.com/Francescodib/coordinate-sanitizer/main/assets/logo.png"
+  alt="coordinate-sanitizer" width="200" />
+</p>
+
 ## Installation
 
 ```bash
