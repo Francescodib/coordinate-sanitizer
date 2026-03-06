@@ -70,5 +70,8 @@ scripts/
 # Documentation source
 docs/
 
+# Assets (images, logos)
+assets/
+
 # Node.js
 node_modules/
