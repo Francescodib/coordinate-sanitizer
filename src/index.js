@@ -4,7 +4,7 @@
  *
  * Based on the Voyager CoordinateSanitizer implementation
  *
- * @version 1.0.3
+ * @version 1.0.4
  * @author Francesco di Biase
  * @license MIT
  */
@@ -38,8 +38,9 @@ class CoordinateSanitizer {
       combinedPattern: /^(.+?)\s*[,;·•]\s*(.+)$/,
 
       // Aladin expected format: "HH MM SS.SSS, ±DD MM SS.SSS"
+      // Requires explicit decimal part and sign so ambiguous space-separated inputs are not misidentified
       aladinFormat:
-        /^\d{2}\s\d{2}\s\d{2}(?:\.\d+)?,\s[+-]?\d{2}\s\d{2}\s\d{2}(?:\.\d+)?$/,
+        /^\d{2}\s\d{2}\s\d{2}\.\d+,\s[+-]\d{2}\s\d{2}\s\d{2}\.\d+$/,
     };
 
     // Common catalog patterns for object identification
@@ -73,10 +74,8 @@ class CoordinateSanitizer {
       return this.createResult(false, "", "Input must be a non-empty string");
     }
 
-    const cleanInput = this.cleanInput(input);
-
-    // Security check
-    if (this.containsMaliciousContent(cleanInput)) {
+    // Security check on raw input before any transformation
+    if (this.containsMaliciousContent(input)) {
       return this.createResult(
         false,
         "",
@@ -84,13 +83,15 @@ class CoordinateSanitizer {
       );
     }
 
-    // Check if already in valid format
-    if (this.isValidFormat(cleanInput)) {
-      return this.createResult(true, cleanInput, null, {
+    // Check if already in valid format before cleaning (preserves original)
+    if (this.isValidFormat(input)) {
+      return this.createResult(true, input, null, {
         inputFormat: "already-valid",
         outputFormat: this.options.outputFormat,
       });
     }
+
+    const cleanInput = this.cleanInput(input);
 
     // Check if it looks like coordinates
     if (!this.looksLikeCoordinates(cleanInput)) {
@@ -100,12 +101,21 @@ class CoordinateSanitizer {
       });
     }
 
-    // Try to parse as combined coordinates
+    // Try to parse as combined coordinates (explicit separator)
     const combinedMatch = cleanInput.match(this.patterns.combinedPattern);
     if (combinedMatch) {
       return this.parseCombinedCoordinates(
         combinedMatch[1].trim(),
         combinedMatch[2].trim()
+      );
+    }
+
+    // Space-separated coordinates are ambiguous; disabled in strict mode
+    if (this.options.strictMode) {
+      return this.createResult(
+        false,
+        "",
+        "Strict mode: use an explicit separator (comma or semicolon) between RA and DEC"
       );
     }
 
@@ -229,52 +239,47 @@ class CoordinateSanitizer {
       return this.createResult(false, "", "Insufficient coordinate components");
     }
 
-    // Try to parse as HMS DMS format (6 or more numbers)
-    if (numMatches.length >= 6) {
-      const raH = parseFloat(numMatches[0]);
-      const raM = parseFloat(numMatches[1]);
-      const raS = parseFloat(numMatches[2]);
-      const decD = parseFloat(numMatches[3]);
-      const decM = parseFloat(numMatches[4]);
-      const decS = parseFloat(numMatches[5]);
+    const raH = parseFloat(numMatches[0]);
+    const raM = parseFloat(numMatches[1]);
+    const raS = parseFloat(numMatches[2]);
+    const decD = parseFloat(numMatches[3]);
+    const decM = parseFloat(numMatches[4]);
+    const decS = parseFloat(numMatches[5]);
 
-      const raDecimal = this.hmsToDecimal(raH, raM, raS);
-      // Check if original string had negative sign (handles -00 case)
-      const isNegative = numMatches[3].trim().startsWith('-');
-      const decDecimal = this.dmsToDecimal(decD, decM, decS, isNegative);
+    const raDecimal = this.hmsToDecimal(raH, raM, raS);
+    // Check if original string had negative sign (handles -00 case)
+    const isNegative = numMatches[3].trim().startsWith("-");
+    const decDecimal = this.dmsToDecimal(decD, decM, decS, isNegative);
 
-      if (this.options.validateRanges) {
-        const raError = this.validateRA(raDecimal);
-        const decError = this.validateDEC(decDecimal);
+    if (this.options.validateRanges) {
+      const raError = this.validateRA(raDecimal);
+      const decError = this.validateDEC(decDecimal);
 
-        if (raError || decError) {
-          return this.createResult(false, "", raError || decError);
-        }
+      if (raError || decError) {
+        return this.createResult(false, "", raError || decError);
       }
-
-      const raResult = {
-        decimal: raDecimal,
-        hours: raH,
-        minutes: raM,
-        seconds: raS,
-      };
-      const decResult = {
-        decimal: decDecimal,
-        degrees: decD,
-        minutes: decM,
-        seconds: decS,
-      };
-
-      const formatted = this.formatOutput(raResult, decResult);
-      return this.createResult(true, formatted, null, {
-        inputFormat: "coordinates",
-        outputFormat: this.options.outputFormat,
-        ra: raResult,
-        dec: decResult,
-      });
     }
 
-    return this.createResult(false, "", "Unable to parse coordinate format");
+    const raResult = {
+      decimal: raDecimal,
+      hours: raH,
+      minutes: raM,
+      seconds: raS,
+    };
+    const decResult = {
+      decimal: decDecimal,
+      degrees: decD,
+      minutes: decM,
+      seconds: decS,
+    };
+
+    const formatted = this.formatOutput(raResult, decResult);
+    return this.createResult(true, formatted, null, {
+      inputFormat: "coordinates",
+      outputFormat: this.options.outputFormat,
+      ra: raResult,
+      dec: decResult,
+    });
   }
 
   /**
@@ -301,30 +306,31 @@ class CoordinateSanitizer {
       return { isValid: true, decimal, hours, minutes, seconds, format: "hms" };
     }
 
-    // Try compact HMS format
-    match = raPart.match(this.patterns.raHMSCompact);
-    if (match) {
-      const hours = parseInt(match[1]);
-      const minutes = parseInt(match[2]);
-      const seconds = parseFloat(match[3]);
+    // Try compact HMS format (not available in strict mode)
+    if (!this.options.strictMode) {
+      match = raPart.match(this.patterns.raHMSCompact);
+      if (match) {
+        const hours = parseInt(match[1]);
+        const minutes = parseInt(match[2]);
+        const seconds = parseFloat(match[3]);
 
-      // Check for negative values in compact HMS format
-      if (hours < 0 || minutes < 0 || seconds < 0) {
+        if (hours < 0 || minutes < 0 || seconds < 0) {
+          return {
+            isValid: false,
+            error: `Invalid RA format: ${raPart} (negative values not allowed in HMS)`,
+          };
+        }
+
+        const decimal = this.hmsToDecimal(hours, minutes, seconds);
         return {
-          isValid: false,
-          error: `Invalid RA format: ${raPart} (negative values not allowed in HMS)`,
+          isValid: true,
+          decimal,
+          hours,
+          minutes,
+          seconds,
+          format: "hms-compact",
         };
       }
-
-      const decimal = this.hmsToDecimal(hours, minutes, seconds);
-      return {
-        isValid: true,
-        decimal,
-        hours,
-        minutes,
-        seconds,
-        format: "hms-compact",
-      };
     }
 
     // Try decimal format
@@ -357,7 +363,7 @@ class CoordinateSanitizer {
       const minutes = parseInt(match[2]);
       const seconds = parseFloat(match[3]);
       // Check if original string had negative sign (handles -00 case)
-      const isNegative = match[1].trim().startsWith('-');
+      const isNegative = match[1].trim().startsWith("-");
       const decimal = this.dmsToDecimal(degrees, minutes, seconds, isNegative);
       return {
         isValid: true,
@@ -369,23 +375,25 @@ class CoordinateSanitizer {
       };
     }
 
-    // Try compact DMS format
-    match = decPart.match(this.patterns.decDMSCompact);
-    if (match) {
-      const degrees = parseInt(match[1]);
-      const minutes = parseInt(match[2]);
-      const seconds = parseFloat(match[3]);
-      // Check if original string had negative sign (handles -00 case)
-      const isNegative = match[1].trim().startsWith('-');
-      const decimal = this.dmsToDecimal(degrees, minutes, seconds, isNegative);
-      return {
-        isValid: true,
-        decimal,
-        degrees,
-        minutes,
-        seconds,
-        format: "dms-compact",
-      };
+    // Try compact DMS format (not available in strict mode)
+    if (!this.options.strictMode) {
+      match = decPart.match(this.patterns.decDMSCompact);
+      if (match) {
+        const degrees = parseInt(match[1]);
+        const minutes = parseInt(match[2]);
+        const seconds = parseFloat(match[3]);
+        // Check if original string had negative sign (handles -00 case)
+        const isNegative = match[1].trim().startsWith("-");
+        const decimal = this.dmsToDecimal(degrees, minutes, seconds, isNegative);
+        return {
+          isValid: true,
+          decimal,
+          degrees,
+          minutes,
+          seconds,
+          format: "dms-compact",
+        };
+      }
     }
 
     // Try decimal format
@@ -428,19 +436,18 @@ class CoordinateSanitizer {
    * @private
    */
   formatAladin(raResult, decResult) {
-    const raFormatted = `${raResult.hours
-      .toString()
-      .padStart(2, "0")} ${raResult.minutes
-      .toString()
-      .padStart(2, "0")} ${raResult.seconds.toFixed(3).padStart(6, "0")}`;
+    // Normalize to prevent seconds from rounding to 60 at 3 decimal places
+    let raH = raResult.hours, raM = raResult.minutes;
+    let raS = Math.round(raResult.seconds * 1000) / 1000;
+    if (raS >= 60) { raS = 0; raM += 1; if (raM >= 60) { raM = 0; raH += 1; } }
+
+    let decD = Math.abs(decResult.degrees), decM = Math.abs(decResult.minutes);
+    let decS = Math.round(Math.abs(decResult.seconds) * 1000) / 1000;
+    if (decS >= 60) { decS = 0; decM += 1; if (decM >= 60) { decM = 0; decD += 1; } }
+
+    const raFormatted = `${raH.toString().padStart(2, "0")} ${raM.toString().padStart(2, "0")} ${raS.toFixed(3).padStart(6, "0")}`;
     const decSign = decResult.decimal >= 0 ? "+" : "-";
-    const decFormatted = `${decSign}${Math.abs(decResult.degrees)
-      .toString()
-      .padStart(2, "0")} ${Math.abs(decResult.minutes)
-      .toString()
-      .padStart(2, "0")} ${Math.abs(decResult.seconds)
-      .toFixed(3)
-      .padStart(6, "0")}`;
+    const decFormatted = `${decSign}${decD.toString().padStart(2, "0")} ${decM.toString().padStart(2, "0")} ${decS.toFixed(3).padStart(6, "0")}`;
 
     return `${raFormatted}, ${decFormatted}`;
   }
@@ -460,13 +467,18 @@ class CoordinateSanitizer {
    * @private
    */
   formatHMSDMS(raResult, decResult) {
-    const raFormatted = `${raResult.hours}h ${
-      raResult.minutes
-    }m ${raResult.seconds.toFixed(3)}s`;
+    // Normalize to prevent seconds from rounding to 60 at 3 decimal places
+    let raH = raResult.hours, raM = raResult.minutes;
+    let raS = Math.round(raResult.seconds * 1000) / 1000;
+    if (raS >= 60) { raS = 0; raM += 1; if (raM >= 60) { raM = 0; raH += 1; } }
+
+    let decD = Math.abs(decResult.degrees), decM = Math.abs(decResult.minutes);
+    let decS = Math.round(Math.abs(decResult.seconds) * 1000) / 1000;
+    if (decS >= 60) { decS = 0; decM += 1; if (decM >= 60) { decM = 0; decD += 1; } }
+
+    const raFormatted = `${raH.toString().padStart(2, "0")}h ${raM.toString().padStart(2, "0")}m ${raS.toFixed(3).padStart(6, "0")}s`;
     const decSign = decResult.decimal >= 0 ? "+" : "-";
-    const decFormatted = `${decSign}${Math.abs(decResult.degrees)}° ${Math.abs(
-      decResult.minutes
-    )}' ${Math.abs(decResult.seconds).toFixed(3)}"`;
+    const decFormatted = `${decSign}${decD.toString().padStart(2, "0")}° ${decM.toString().padStart(2, "0")}' ${decS.toFixed(3).padStart(6, "0")}"`;
 
     return `${raFormatted}, ${decFormatted}`;
   }
@@ -481,13 +493,24 @@ class CoordinateSanitizer {
 
   /**
    * Convert decimal hours to HMS
+   * Handles floating point carry correctly.
    * @private
    */
   decimalToHMS(decimal) {
-    const hours = Math.floor(decimal);
+    let hours = Math.floor(decimal);
     const minutesDecimal = (decimal - hours) * 60;
-    const minutes = Math.floor(minutesDecimal);
-    const seconds = (minutesDecimal - minutes) * 60;
+    let minutes = Math.floor(minutesDecimal);
+    let seconds = Math.round((minutesDecimal - minutes) * 60 * 1000) / 1000;
+
+    // Carry over floating point overflow
+    if (seconds >= 60) {
+      seconds = 0;
+      minutes += 1;
+      if (minutes >= 60) {
+        minutes = 0;
+        hours += 1;
+      }
+    }
 
     return { hours, minutes, seconds };
   }
@@ -505,16 +528,28 @@ class CoordinateSanitizer {
 
   /**
    * Convert decimal degrees to DMS
+   * Handles floating point carry correctly.
    * @private
    */
   decimalToDMS(decimal) {
     const sign = decimal < 0 ? -1 : 1;
     const absDecimal = Math.abs(decimal);
-    const degrees = Math.floor(absDecimal) * sign;
-    const minutesDecimal = (absDecimal - Math.floor(absDecimal)) * 60;
-    const minutes = Math.floor(minutesDecimal);
-    const seconds = (minutesDecimal - minutes) * 60;
+    let deg = Math.floor(absDecimal);
+    const minutesDecimal = (absDecimal - deg) * 60;
+    let minutes = Math.floor(minutesDecimal);
+    let seconds = Math.round((minutesDecimal - minutes) * 60 * 1000) / 1000;
 
+    // Carry over floating point overflow
+    if (seconds >= 60) {
+      seconds = 0;
+      minutes += 1;
+      if (minutes >= 60) {
+        minutes = 0;
+        deg += 1;
+      }
+    }
+
+    const degrees = deg * sign;
     return { degrees, minutes, seconds };
   }
 
@@ -541,13 +576,17 @@ class CoordinateSanitizer {
   }
 
   /**
-   * Check if input is already in valid format
+   * Check if input is already in valid format for the configured output
    * @private
    */
   isValidFormat(input) {
     switch (this.options.outputFormat) {
       case "aladin":
         return this.patterns.aladinFormat.test(input);
+      case "decimal":
+        return /^\d+\.\d+,\s*[+-]?\d+\.\d+$/.test(input);
+      case "hms-dms":
+        return /^\d{2}h \d{2}m \d{2}\.\d{3}s, [+-]\d{2}° \d{2}' \d{2}\.\d{3}"$/.test(input);
       default:
         return false;
     }
@@ -585,6 +624,9 @@ class CoordinateSanitizer {
 
   /**
    * Static method to create sanitizer with common presets
+   * @param {string} preset - Preset name: 'aladin', 'decimal', 'loose', or 'strict'
+   * @returns {CoordinateSanitizer}
+   * @throws {Error} If an unknown preset name is provided
    * @static
    */
   static createPreset(preset) {
@@ -599,7 +641,13 @@ class CoordinateSanitizer {
       },
     };
 
-    return new CoordinateSanitizer(presets[preset] || {});
+    if (!presets[preset]) {
+      throw new Error(
+        `Unknown preset: "${preset}". Available presets: ${Object.keys(presets).join(", ")}`
+      );
+    }
+
+    return new CoordinateSanitizer(presets[preset]);
   }
 }
 

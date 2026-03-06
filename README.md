@@ -93,7 +93,7 @@ const sanitizer = new CoordinateSanitizer(options);
 - `outputFormat` (string): Output format - `'aladin'`, `'decimal'`, `'hms-dms'` (default: `'aladin'`)
 - `precision` (number): Decimal precision for output (default: `6`)
 - `validateRanges` (boolean): Enable range validation (default: `true`)
-- `strictMode` (boolean): Enable strict parsing mode (default: `false`)
+- `strictMode` (boolean): Enable strict parsing mode (default: `false`). In strict mode, compact 6-digit formats and space-separated coordinates without an explicit separator are rejected; only unambiguous formats are accepted (HMS/DMS with markers, colon-separated, decimal).
 
 ### Methods
 
@@ -133,6 +133,8 @@ Creates a sanitizer with predefined configurations:
 - `'loose'`: Aladin format without range validation
 - `'strict'`: Aladin format with strict parsing and validation
 
+Throws an `Error` if an unknown preset name is provided.
+
 ## Usage Examples
 
 ### Different Output Formats
@@ -151,18 +153,43 @@ console.log(result2.coordinates); // "12.582222, 12.582222"
 // HMS/DMS format
 const hmsSanitizer = new CoordinateSanitizer({ outputFormat: 'hms-dms' });
 const result3 = hmsSanitizer.sanitizeCoordinates('12.5, 12.5');
-console.log(result3.coordinates); // "12h 30m 0.000s, +12° 30' 0.000""
+console.log(result3.coordinates); // "12h 30m 00.000s, +12° 30' 00.000""
 ```
 
 ### Using Presets
 
 ```javascript
 // Quick setup with presets
-const aladinSanitizer = CoordinateSanitizer.createPreset('aladin');
+const aladinSanitizer  = CoordinateSanitizer.createPreset('aladin');
 const decimalSanitizer = CoordinateSanitizer.createPreset('decimal');
-const looseSanitizer = CoordinateSanitizer.createPreset('loose');
+const looseSanitizer   = CoordinateSanitizer.createPreset('loose');
+const strictSanitizer  = CoordinateSanitizer.createPreset('strict');
 
 const result = aladinSanitizer.sanitizeCoordinates('12h 34m 56s, +12° 34\' 56"');
+
+// createPreset throws for unknown names
+try {
+  CoordinateSanitizer.createPreset('unknown');
+} catch (e) {
+  console.error(e.message); // "Unknown preset: "unknown". Available presets: aladin, decimal, loose, strict"
+}
+```
+
+### Strict Mode
+
+Strict mode accepts only unambiguous coordinate formats and requires an explicit separator between RA and DEC:
+
+```javascript
+const strict = new CoordinateSanitizer({ strictMode: true });
+
+// Accepted: HMS/DMS with markers, colon-separated, decimal
+strict.sanitizeCoordinates('12h 34m 56s, +12° 34\' 56"').isValid; // true
+strict.sanitizeCoordinates('12:34:56, +12:34:56').isValid;         // true
+strict.sanitizeCoordinates('12.5, -45.75').isValid;                // true
+
+// Rejected: compact format, space-separated without explicit separator
+strict.sanitizeCoordinates('123456, -123456').isValid;       // false
+strict.sanitizeCoordinates('12 34 56 -45 12 34').isValid;    // false
 ```
 
 ### Range Validation
@@ -279,7 +306,9 @@ function safeSearch(input) {
 </script>
 ```
 
-### ES6 Modules
+### ES6 Modules (bundlers)
+
+When using a bundler such as webpack or Rollup, the `module` field is resolved automatically:
 
 ```javascript
 import CoordinateSanitizer from 'coordinate-sanitizer';
@@ -287,6 +316,8 @@ import CoordinateSanitizer from 'coordinate-sanitizer';
 const sanitizer = new CoordinateSanitizer();
 const result = sanitizer.sanitizeCoordinates('12h 34m 56s, +12° 34\' 56"');
 ```
+
+> **Node.js native ESM**: the package uses CommonJS (`require`). In a `.mjs` file or `"type": "module"` project use `createRequire` or a dynamic `import()` of the CJS entry point.
 
 ## TypeScript Support
 
@@ -347,15 +378,17 @@ Common error types:
 
 ## Testing
 
-Run the test suite:
-
 ```bash
+# Unit tests (52 tests)
 npm test
-```
 
-Run examples:
+# Integration tests – round-trip, cross-format consistency, known objects (29 tests)
+npm run test:integration
 
-```bash
+# Full suite
+npm run test:all
+
+# Run examples
 npm run example
 ```
 
@@ -377,8 +410,14 @@ cd coordinate-sanitizer
 # Install dependencies
 npm install
 
-# Run tests
+# Run unit tests
 npm test
+
+# Run integration tests
+npm run test:integration
+
+# Run full suite
+npm run test:all
 
 # Run examples
 npm run example
@@ -386,26 +425,25 @@ npm run example
 
 ## Stats
 
-- **Lines of code**: ~800
-- **Test coverage**: 37 comprehensive tests
+- **Lines of code**: ~850
+- **Unit tests**: 52
+- **Integration tests**: 29 (round-trip, cross-format, known objects)
 - **Performance**: 10,000+ coordinates/second
 - **Bundle size**: Minimal (zero dependencies)
 - **Formats supported**: 15+ input variations
 
 ## Changelog
 
-### 1.0.3
-- Fixed bug where negative declination coordinates starting with -00 (e.g., `-00 58 20.000`) would lose their negative sign
-- Improved sign handling in coordinate formatting functions
-- Added comprehensive test cases for -00 degree edge case
+### 1.0.4
+- Implemented `strictMode` option (was documented but had no effect)
+- Fixed floating point carry overflow in `decimalToHMS` / `decimalToDMS` and in formatting functions
+- Fixed `isValidFormat` to detect already-valid input for all output formats, not only `aladin`
+- Fixed `formatHMSDMS` zero-padding for hours, minutes, and degree components
+- `createPreset` now throws a descriptive `Error` for unknown preset names
+- Updated TypeScript definitions: added `strictMode`, `createPreset` signature, fixed exports
+- Added 29 integration tests (round-trip idempotency, cross-format consistency, known objects)
 
-### 1.0.1
-- Initial release
-- Support for multiple coordinate formats
-- Range validation
-- Security features
-- TypeScript support
-- Comprehensive test suite
+See [CHANGELOG.md](CHANGELOG.md) for the full history.
 
 ## License
 

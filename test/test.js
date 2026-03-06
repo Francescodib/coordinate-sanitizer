@@ -475,6 +475,117 @@ runner.test('Should work with mixed coordinate formats', () => {
     });
 });
 
+// strictMode tests
+runner.test('strictMode: should reject space-separated coordinates', () => {
+    const sanitizer = new CoordinateSanitizer({ strictMode: true });
+    const result = sanitizer.sanitizeCoordinates('12 34 56.7 -45 12 34.5');
+    runner.assert(!result.isValid, 'Strict mode should reject space-separated coordinates');
+    runner.assertContains(result.error, 'Strict mode');
+});
+
+runner.test('strictMode: should reject compact HMS/DMS format', () => {
+    const sanitizer = new CoordinateSanitizer({ strictMode: true });
+    const result = sanitizer.sanitizeCoordinates('123456, -123456');
+    runner.assert(!result.isValid, 'Strict mode should reject compact format');
+});
+
+runner.test('strictMode: should accept standard HMS/DMS format', () => {
+    const sanitizer = new CoordinateSanitizer({ strictMode: true });
+    const result = sanitizer.sanitizeCoordinates('12h 34m 56.78s, +12° 34\' 56.78"');
+    runner.assert(result.isValid, 'Strict mode should accept HMS/DMS with explicit separator');
+    runner.assertEqual(result.metadata.inputFormat, 'coordinates');
+});
+
+runner.test('strictMode: should accept colon-separated format', () => {
+    const sanitizer = new CoordinateSanitizer({ strictMode: true });
+    const result = sanitizer.sanitizeCoordinates('12:34:56.78, +12:34:56.78');
+    runner.assert(result.isValid, 'Strict mode should accept colon-separated format');
+});
+
+runner.test('strictMode: should accept decimal format', () => {
+    const sanitizer = new CoordinateSanitizer({ strictMode: true });
+    const result = sanitizer.sanitizeCoordinates('12.5, -45.75');
+    runner.assert(result.isValid, 'Strict mode should accept decimal format');
+    runner.assertEqual(result.metadata.inputFormat, 'coordinates');
+});
+
+runner.test('strictMode: preset should enable strict mode', () => {
+    const sanitizer = CoordinateSanitizer.createPreset('strict');
+    runner.assert(sanitizer.options.strictMode === true, 'Strict preset should set strictMode');
+    runner.assert(sanitizer.options.validateRanges === true, 'Strict preset should enable validation');
+    const result = sanitizer.sanitizeCoordinates('12 34 56.7 -45 12 34.5');
+    runner.assert(!result.isValid, 'Strict preset should reject space-separated coordinates');
+});
+
+// Floating point precision tests
+runner.test('Should not produce seconds >= 60 due to floating point', () => {
+    const sanitizer = new CoordinateSanitizer();
+    const result = sanitizer.sanitizeCoordinates('23h 59m 59.9999s, +89° 59\' 59.9999"');
+    runner.assert(result.isValid, 'Should parse edge case coordinates');
+    runner.assert(
+        !result.coordinates.includes(' 60.'),
+        'Seconds should not overflow to 60 in output: ' + result.coordinates
+    );
+});
+
+runner.test('Should handle decimal-to-HMS conversion without FP artifacts', () => {
+    const sanitizer = new CoordinateSanitizer({ outputFormat: 'decimal' });
+    const result = sanitizer.sanitizeCoordinates('12h 00m 00s, +45° 00\' 00"');
+    runner.assert(result.isValid);
+    runner.assertContains(result.coordinates, '12.000000');
+});
+
+// isValidFormat for non-aladin output formats
+runner.test('Should detect already-valid decimal format', () => {
+    const sanitizer = new CoordinateSanitizer({ outputFormat: 'decimal' });
+    const result = sanitizer.sanitizeCoordinates('12.500000, -45.750000');
+    runner.assert(result.isValid, 'Should accept already-valid decimal format');
+    runner.assertEqual(result.metadata.inputFormat, 'already-valid');
+    runner.assertEqual(result.coordinates, '12.500000, -45.750000');
+});
+
+runner.test('Should detect already-valid hms-dms format', () => {
+    const sanitizer = new CoordinateSanitizer({ outputFormat: 'hms-dms' });
+    const result = sanitizer.sanitizeCoordinates('12h 34m 56.780s, +12° 34\' 56.780"');
+    runner.assert(result.isValid, 'Should accept already-valid hms-dms format');
+    runner.assertEqual(result.metadata.inputFormat, 'already-valid');
+});
+
+// formatHMSDMS padding
+runner.test('formatHMSDMS should zero-pad single-digit components', () => {
+    const sanitizer = new CoordinateSanitizer({ outputFormat: 'hms-dms' });
+    const result = sanitizer.sanitizeCoordinates('1h 5m 3s, +1° 5\' 3"');
+    runner.assert(result.isValid, 'Should parse single-digit coordinate components');
+    runner.assertContains(result.coordinates, '01h', 'Hours should be zero-padded');
+    runner.assertContains(result.coordinates, '05m', 'Minutes should be zero-padded');
+    runner.assertContains(result.coordinates, '+01°', 'DEC degrees should be zero-padded');
+    runner.assertContains(result.coordinates, "05'", 'DEC minutes should be zero-padded');
+});
+
+// createPreset error handling
+runner.test('createPreset should throw for unknown preset name', () => {
+    let threw = false;
+    try {
+        CoordinateSanitizer.createPreset('nonexistent');
+    } catch (e) {
+        threw = true;
+        runner.assertContains(e.message, 'Unknown preset');
+        runner.assertContains(e.message, 'nonexistent');
+    }
+    runner.assert(threw, 'createPreset should throw an Error for unknown preset');
+});
+
+runner.test('createPreset should list available presets in error message', () => {
+    let errorMessage = '';
+    try {
+        CoordinateSanitizer.createPreset('bad');
+    } catch (e) {
+        errorMessage = e.message;
+    }
+    runner.assert(errorMessage.includes('aladin'), 'Error should list available presets');
+    runner.assert(errorMessage.includes('strict'), 'Error should list available presets');
+});
+
 // Run all tests
 runner.run().catch(error => {
     console.error('Test runner failed:', error);

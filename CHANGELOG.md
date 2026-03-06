@@ -5,6 +5,27 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.4] - 2026-03-06
+
+### Fixed
+- Implemented `strictMode` option that was previously documented but had no effect. In strict mode, compact (6-digit) HMS/DMS formats and space-separated coordinates without an explicit RA/DEC separator are rejected, requiring unambiguous input.
+- Fixed floating point carry overflow in `decimalToHMS` and `decimalToDMS`: seconds could previously evaluate to `60.000` in edge cases, producing invalid output strings.
+- `isValidFormat` now correctly detects already-valid input for all configured output formats (`decimal`, `hms-dms`), not only `aladin`. This avoids unnecessary re-parsing of valid strings.
+- `formatHMSDMS` now zero-pads hours, minutes, and degree components for consistent output (e.g. `01h 05m 03.000s` instead of `1h 5m 3.000s`).
+- `createPreset` now throws a descriptive `Error` when an unknown preset name is provided, instead of silently falling back to default options.
+- Removed redundant nested conditional in `parseSpaceSeparatedCoordinates`.
+- Removed misleading `"import"` field from `package.json` exports: the module uses CommonJS (`module.exports`) and is not an ES module.
+
+### Changed
+- TypeScript definitions updated: added `strictMode` to `CoordinateSanitizerOptions`, added `createPreset` static method signature with typed preset union and `@throws` annotation, resolved conflicting `export default` / `export =` declarations (now uses only `export =` for correct CommonJS interop).
+
+### Added
+- Comprehensive tests for `strictMode` behaviour across all affected code paths.
+- Tests for floating point precision edge cases.
+- Tests for `isValidFormat` with `decimal` and `hms-dms` output formats.
+- Tests for `formatHMSDMS` zero-padding.
+- Tests for `createPreset` error handling.
+
 ## [1.0.3] - 2025-01-03
 
 ### Fixed

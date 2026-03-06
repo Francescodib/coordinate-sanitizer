@@ -1,6 +1,6 @@
 /**
  * Coordinate Sanitization Library TypeScript Definitions
- * @version 1.0.0
+ * @version 1.0.4
  */
 
 export interface CoordinateSanitizerOptions {
@@ -10,6 +10,12 @@ export interface CoordinateSanitizerOptions {
   precision?: number;
   /** Enable range validation */
   validateRanges?: boolean;
+  /**
+   * Enable strict parsing mode.
+   * In strict mode, compact (6-digit) and space-separated formats are rejected;
+   * an explicit separator (comma or semicolon) between RA and DEC is required.
+   */
+  strictMode?: boolean;
 }
 
 export interface CoordinateComponent {
@@ -62,7 +68,7 @@ export interface SupportedFormats {
  * Coordinate Sanitizer Class
  * Handles various coordinate formats and converts them to standardized formats
  */
-export default class CoordinateSanitizer {
+declare class CoordinateSanitizer {
   /** Configuration options */
   readonly options: Required<CoordinateSanitizerOptions>;
 
@@ -87,7 +93,7 @@ export default class CoordinateSanitizer {
   looksLikeCoordinates(input: string): boolean;
 
   /**
-   * Check if input is already in valid format
+   * Check if input is already in valid format for the configured output
    * @param input Input string to check
    * @returns True if input is already in the target format
    */
@@ -98,9 +104,14 @@ export default class CoordinateSanitizer {
    * @returns Object containing supported input and output formats
    */
   static getSupportedFormats(): SupportedFormats;
+
+  /**
+   * Create a sanitizer instance with a predefined configuration preset
+   * @param preset Preset name: 'aladin', 'decimal', 'loose', or 'strict'
+   * @returns A new CoordinateSanitizer configured with the chosen preset
+   * @throws {Error} If an unknown preset name is provided
+   */
+  static createPreset(preset: 'aladin' | 'decimal' | 'loose' | 'strict'): CoordinateSanitizer;
 }
 
-/**
- * Export for CommonJS environments
- */
-export = CoordinateSanitizer; 
+export = CoordinateSanitizer;
