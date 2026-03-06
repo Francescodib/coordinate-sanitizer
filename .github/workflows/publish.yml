@@ -41,10 +41,20 @@ jobs:
           registry-url: 'https://registry.npmjs.org'
 
       - name: Upgrade npm (Trusted Publishing requires npm >= 11.5.1)
-        run: npm install -g npm@11
+        run: npm install -g npm@latest
 
       - name: Install dependencies
         run: npm ci
 
+      - name: Debug environment
+        run: |
+          echo "npm: $(npm --version)"
+          echo "node: $(node --version)"
+          echo "OIDC URL available: ${ACTIONS_ID_TOKEN_REQUEST_URL:+yes}"
+
       - name: Publish
-        run: npm publish --access public
+        run: npm publish --access public --loglevel=verbose
+
+      - name: Show npm debug log on failure
+        if: failure()
+        run: cat /home/runner/.npm/_logs/*.log 2>/dev/null | tail -200 || true
