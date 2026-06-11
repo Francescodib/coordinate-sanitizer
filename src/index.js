@@ -4,7 +4,6 @@
  *
  * Based on the Voyager CoordinateSanitizer implementation
  *
- * @version 1.0.4
  * @author Francesco di Biase
  * @license MIT
  */
@@ -17,6 +16,7 @@ class CoordinateSanitizer {
       precision: 6,
       validateRanges: true,
       strictMode: false,
+      raDecimalUnit: "degrees", // 'degrees' | 'hours' — unit of a bare decimal RA input
       ...options,
     };
 
@@ -37,6 +37,10 @@ class CoordinateSanitizer {
       // Combined coordinate patterns - more flexible
       combinedPattern: /^(.+?)\s*[,;·•]\s*(.+)$/,
 
+      // Labeled coordinates: "RA 12 34 56 DEC +12 34 56", "RA: 12:34:56, DEC: -05:23:28"
+      labeledPattern:
+        /^RA\.?\s*[:=]?\s*(.+?)\s*[,;]?\s*DEC(?:L(?:INATION)?)?\.?\s*[:=]?\s*(.+)$/i,
+
       // Aladin expected format: "HH MM SS.SSS, ±DD MM SS.SSS"
       // Requires explicit decimal part and sign so ambiguous space-separated inputs are not misidentified
       aladinFormat:
@@ -55,7 +59,7 @@ class CoordinateSanitizer {
       /^SAO\s?\d+$/i, // SAO catalog
       /^Sh2[-\s]?\d+$/i, // Sharpless nebulae
       /^Barnard\s?\d+$/i, // Barnard objects
-      /^PK\s?[\d+\-.\+]+$/i, // PK planetary nebulae
+      /^PK\s?[\d+\-.]+$/i, // PK planetary nebulae
       /^LBN\s?\d+$/i, // Lynds' bright nebulae
       /^[A-Z]{2,}\s+[A-Z]{2,}$/i, // Named stars (ALPHA CENTAURI)
       /^\d+\s+[A-Z]{2,}$/i, // e.g. "51 Eri"
@@ -101,6 +105,16 @@ class CoordinateSanitizer {
       });
     }
 
+    // Try labeled coordinates first ("RA ... DEC ..."): labels make the
+    // input unambiguous, so this is allowed even in strict mode
+    const labeledMatch = cleanInput.match(this.patterns.labeledPattern);
+    if (labeledMatch) {
+      return this.parseCombinedCoordinates(
+        labeledMatch[1].trim(),
+        labeledMatch[2].trim()
+      );
+    }
+
     // Try to parse as combined coordinates (explicit separator)
     const combinedMatch = cleanInput.match(this.patterns.combinedPattern);
     if (combinedMatch) {
@@ -125,11 +139,53 @@ class CoordinateSanitizer {
       return spaceMatch;
     }
 
+    // Enough numeric components to be coordinates, but parsing failed:
+    // report the error instead of falling back to object-name passthrough
+    if (spaceMatch.error && !spaceMatch.error.includes("Insufficient")) {
+      return spaceMatch;
+    }
+
     // If no separator found, assume it's an object name
     return this.createResult(true, cleanInput, null, {
       inputFormat: "object-name",
       outputFormat: "passthrough",
     });
+  }
+
+  /**
+   * Parse coordinates and return numeric values without formatting.
+   * @param {string} input - Raw coordinate input
+   * @returns {{raHours: number, raDegrees: number, decDegrees: number}|null}
+   *   Numeric coordinates, or null if the input is invalid or an object name
+   */
+  parse(input) {
+    const result = this.sanitizeCoordinates(input);
+    if (!result.isValid || !result.metadata) return null;
+
+    let metadata = result.metadata;
+
+    // Already-valid inputs skip component extraction; re-parse the
+    // normalized string to recover the numeric values
+    if (metadata.inputFormat === "already-valid") {
+      const match = result.coordinates.match(this.patterns.combinedPattern);
+      if (!match) return null;
+      const reparsed = this.parseCombinedCoordinates(
+        match[1].trim(),
+        match[2].trim()
+      );
+      if (!reparsed.isValid || !reparsed.metadata) return null;
+      metadata = reparsed.metadata;
+    }
+
+    if (metadata.inputFormat !== "coordinates" || !metadata.ra || !metadata.dec) {
+      return null;
+    }
+
+    return {
+      raHours: metadata.ra.decimal,
+      raDegrees: metadata.ra.decimal * 15,
+      decDegrees: metadata.dec.decimal,
+    };
   }
 
   /**
@@ -159,7 +215,8 @@ class CoordinateSanitizer {
       /<[^>]*>/, // HTML tags
       /javascript:/i, // JavaScript protocol
       /on\w+\s*=/i, // Event handlers
-      /[\x00-\x1F\x7F]/, // Control characters
+      // eslint-disable-next-line no-control-regex -- intentionally matches control characters
+      /[\x00-\x1F\x7F]/,
     ];
 
     return dangerousPatterns.some((pattern) => pattern.test(input));
@@ -246,6 +303,13 @@ class CoordinateSanitizer {
     const decM = parseFloat(numMatches[4]);
     const decS = parseFloat(numMatches[5]);
 
+    const componentError =
+      this.validateSexagesimalComponents(raM, raS, "RA") ||
+      this.validateSexagesimalComponents(decM, decS, "DEC");
+    if (componentError) {
+      return this.createResult(false, "", componentError);
+    }
+
     const raDecimal = this.hmsToDecimal(raH, raM, raS);
     // Check if original string had negative sign (handles -00 case)
     const isNegative = numMatches[3].trim().startsWith("-");
@@ -302,6 +366,15 @@ class CoordinateSanitizer {
         };
       }
 
+      const componentError = this.validateSexagesimalComponents(
+        minutes,
+        seconds,
+        "RA"
+      );
+      if (componentError) {
+        return { isValid: false, error: componentError };
+      }
+
       const decimal = this.hmsToDecimal(hours, minutes, seconds);
       return { isValid: true, decimal, hours, minutes, seconds, format: "hms" };
     }
@@ -321,6 +394,15 @@ class CoordinateSanitizer {
           };
         }
 
+        const componentError = this.validateSexagesimalComponents(
+          minutes,
+          seconds,
+          "RA"
+        );
+        if (componentError) {
+          return { isValid: false, error: componentError };
+        }
+
         const decimal = this.hmsToDecimal(hours, minutes, seconds);
         return {
           isValid: true,
@@ -336,7 +418,10 @@ class CoordinateSanitizer {
     // Try decimal format
     match = raPart.match(this.patterns.raDecimal);
     if (match) {
-      const decimal = parseFloat(match[1]);
+      const value = parseFloat(match[1]);
+      // Bare decimal RA is in degrees by convention; convert to internal hours
+      const decimal =
+        this.options.raDecimalUnit === "hours" ? value : value / 15;
       const { hours, minutes, seconds } = this.decimalToHMS(decimal);
       return {
         isValid: true,
@@ -362,6 +447,16 @@ class CoordinateSanitizer {
       const degrees = parseInt(match[1]);
       const minutes = parseInt(match[2]);
       const seconds = parseFloat(match[3]);
+
+      const componentError = this.validateSexagesimalComponents(
+        minutes,
+        seconds,
+        "DEC"
+      );
+      if (componentError) {
+        return { isValid: false, error: componentError };
+      }
+
       // Check if original string had negative sign (handles -00 case)
       const isNegative = match[1].trim().startsWith("-");
       const decimal = this.dmsToDecimal(degrees, minutes, seconds, isNegative);
@@ -382,6 +477,16 @@ class CoordinateSanitizer {
         const degrees = parseInt(match[1]);
         const minutes = parseInt(match[2]);
         const seconds = parseFloat(match[3]);
+
+        const componentError = this.validateSexagesimalComponents(
+          minutes,
+          seconds,
+          "DEC"
+        );
+        if (componentError) {
+          return { isValid: false, error: componentError };
+        }
+
         // Check if original string had negative sign (handles -00 case)
         const isNegative = match[1].trim().startsWith("-");
         const decimal = this.dmsToDecimal(degrees, minutes, seconds, isNegative);
@@ -453,11 +558,18 @@ class CoordinateSanitizer {
   }
 
   /**
-   * Format as decimal degrees
+   * Format as decimal values.
+   * RA is output in the unit configured by raDecimalUnit (degrees by default)
+   * so that decimal output round-trips through decimal input; DEC is always
+   * in degrees.
    * @private
    */
   formatDecimal(raResult, decResult) {
-    return `${raResult.decimal.toFixed(
+    const raValue =
+      this.options.raDecimalUnit === "hours"
+        ? raResult.decimal
+        : raResult.decimal * 15;
+    return `${raValue.toFixed(
       this.options.precision
     )}, ${decResult.decimal.toFixed(this.options.precision)}`;
   }
@@ -565,6 +677,22 @@ class CoordinateSanitizer {
   }
 
   /**
+   * Validate sexagesimal minutes/seconds components (must be 0-59.999...).
+   * Applied regardless of validateRanges: 99 minutes is malformed notation,
+   * not an out-of-range value.
+   * @private
+   */
+  validateSexagesimalComponents(minutes, seconds, axis) {
+    if (minutes < 0 || minutes >= 60) {
+      return `Invalid ${axis}: minutes out of range: ${minutes} (must be 0-59)`;
+    }
+    if (seconds < 0 || seconds >= 60) {
+      return `Invalid ${axis}: seconds out of range: ${seconds} (must be 0-59.999)`;
+    }
+    return null;
+  }
+
+  /**
    * Validate DEC range (-90 to +90 degrees)
    * @private
    */
@@ -613,9 +741,10 @@ class CoordinateSanitizer {
     return {
       input: [
         "HMS/DMS (12h 34m 56.78s, +12° 34' 56.78\")",
-        "Decimal (123.456, -12.345)",
+        "Decimal degrees (123.456, -12.345)",
         "Compact (123456.78, -123456.78)",
         "Mixed separators (12:34:56.78, +12°34'56.78\")",
+        "Labeled (RA 12 34 56.78 DEC +12 34 56.78)",
         "Object names (M31, NGC 1234, etc.)",
       ],
       output: ["aladin", "decimal", "hms-dms"],

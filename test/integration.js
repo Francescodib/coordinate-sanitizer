@@ -98,13 +98,14 @@ function parseAladin(str) {
 }
 
 /**
- * Parse a decimal-format string "RA_hours, DEC_degrees"
+ * Parse a decimal-format string "RA_degrees, DEC_degrees"
+ * (decimal output uses degrees for both axes by default)
  * @returns {{ ra_h: number, dec_deg: number }}
  */
 function parseDecimal(str) {
     const parts = str.split(',').map(s => s.trim());
     if (parts.length !== 2) throw new Error(`Cannot parse decimal string: "${str}"`);
-    return { ra_h: parseFloat(parts[0]), dec_deg: parseFloat(parts[1]) };
+    return { ra_h: parseFloat(parts[0]) / 15, dec_deg: parseFloat(parts[1]) };
 }
 
 /**
@@ -150,8 +151,9 @@ const OUTPUT_FORMATS = ['aladin', 'decimal', 'hms-dms'];
 const INPUT_VARIANTS = [
     { label: 'HMS/DMS symbols',   value: "05h 35m 17.30s, -05° 23' 28.00\"" },
     { label: 'colon-separated',   value: '05:35:17.30, -05:23:28.00' },
-    { label: 'decimal hours/deg', value: '5.5882, -5.3911' },
+    { label: 'decimal degrees',   value: '83.8221, -5.3911' },
     { label: 'space-separated',   value: '05 35 17.30 -05 23 28.00' },
+    { label: 'labeled RA/DEC',    value: 'RA 05 35 17.30 DEC -05 23 28.00' },
 ];
 
 /**

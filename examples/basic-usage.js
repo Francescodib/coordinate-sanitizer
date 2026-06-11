@@ -167,7 +167,7 @@ testTargets.forEach(target => {
 console.log('Testing invalid coordinate (should fail):');
 try {
     console.log('Target: "25h 00m 00s, +00° 00\' 00""');
-    const result = telescope.gotoTarget('25h 00m 00s, +00° 00\' 00"');
+    telescope.gotoTarget('25h 00m 00s, +00° 00\' 00"');
     console.log('  This should not print');
 } catch (error) {
     console.log(`  Expected error: ${error.message}`);

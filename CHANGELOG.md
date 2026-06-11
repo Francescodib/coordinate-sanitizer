@@ -5,6 +5,28 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.0] - 2026-06-11
+
+### Changed (breaking)
+- **Bare decimal RA input is now interpreted as degrees** (the astronomical convention and what the README always documented), no longer as hours. `'123.456, -12.345'` now correctly produces `"08 13 49.440, -12 20 42.000"`. Set the new `raDecimalUnit: 'hours'` option to restore the previous behaviour.
+- **`decimal` output format now emits RA in degrees** (consistent with decimal input). With `raDecimalUnit: 'hours'` it emits hours, preserving round-trip stability in both configurations.
+- Minimum supported Node.js version raised from 14 to 18 (matching the CI matrix).
+
+### Fixed
+- Sexagesimal minutes and seconds components are now validated: `12h 99m 99s` is rejected as malformed instead of being silently summed into the result. This applies to HMS/DMS, compact, and space-separated formats, regardless of the `validateRanges` option.
+- Space-separated coordinate inputs that fail to parse (malformed components, out-of-range values) now return the parse error instead of being silently passed through as an "object name".
+- `package.json` `exports` map: the `types` condition is now listed first, as required for TypeScript `moduleResolution: node16/nodenext/bundler` to pick up the definitions; the `module` field now points to a real ESM entry point.
+- TypeScript definitions: `metadata` fields are now correctly optional, matching the runtime behaviour on error results.
+
+### Added
+- Native ESM entry point (`src/index.mjs`): `import CoordinateSanitizer from 'coordinate-sanitizer'` now works in Node.js without `createRequire`.
+- `raDecimalUnit` option (`'degrees'` | `'hours'`) controlling the unit of bare decimal RA input/output.
+- Labeled coordinate parsing: `RA 05 35 17.30 DEC -05 23 28.00`, `RA: 05:35:17, DEC: -05:23:28` (accepted in strict mode too, since labels are unambiguous).
+- `parse(input)` method returning plain numeric values (`{ raHours, raDegrees, decDegrees }`) or `null`, for programmatic use without string formatting.
+- ESLint (flat config) with `npm run lint`, now part of CI.
+- TypeScript compile check of the type definitions (`npm run typecheck`), now part of CI; the previous definitions did not compile (illegal `export =` mixed with named exports) and have been rewritten using the canonical class + namespace pattern.
+- 15 new unit tests and 4 new integration test rows covering all of the above.
+
 ## [1.0.5] - 2026-03-06
 
 ### Fixed
@@ -95,13 +117,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Security guidelines
 - Performance benchmarks
 
-## [Unreleased]
-
-### Planned
+## Planned
 - Support for additional catalog formats
 - Integration with popular astronomy libraries
 - CLI tool for command-line usage
-- Advanced coordinate system conversions
+- Advanced coordinate system conversions (epochs, galactic frame)
 - Web-based coordinate converter tool
 - Additional output formats (JSON, XML)
 - Coordinate validation rules customization

@@ -278,14 +278,16 @@ runner.test('Should output decimal format when requested', () => {
     const sanitizer = new CoordinateSanitizer({ outputFormat: 'decimal' });
     const result = sanitizer.sanitizeCoordinates('12h 00m 00s, +12° 00\' 00"');
     runner.assert(result.isValid);
-    runner.assertContains(result.coordinates, '12.000000');
+    // Decimal output is in degrees: RA 12h = 180°
+    runner.assertContains(result.coordinates, '180.000000');
     runner.assertContains(result.coordinates, '12.000000');
 });
 
 runner.test('Should output HMS/DMS format when requested', () => {
     const sanitizer = new CoordinateSanitizer({ outputFormat: 'hms-dms' });
-    const result = sanitizer.sanitizeCoordinates('12, +12');
+    const result = sanitizer.sanitizeCoordinates('180, +12');
     runner.assert(result.isValid);
+    // RA 180° = 12h
     runner.assertContains(result.coordinates, '12h');
     runner.assertContains(result.coordinates, '12°');
 });
@@ -297,6 +299,8 @@ runner.test('Should respect custom precision', () => {
     });
     const result = sanitizer.sanitizeCoordinates('12h 34m 56.123s, +12° 34\' 56.123"');
     runner.assert(result.isValid);
+    // RA 12h34m56.123s = 188.73° at 2-digit precision; DEC = 12.58°
+    runner.assertContains(result.coordinates, '188.73');
     runner.assertContains(result.coordinates, '12.58');
 });
 
@@ -532,7 +536,8 @@ runner.test('Should handle decimal-to-HMS conversion without FP artifacts', () =
     const sanitizer = new CoordinateSanitizer({ outputFormat: 'decimal' });
     const result = sanitizer.sanitizeCoordinates('12h 00m 00s, +45° 00\' 00"');
     runner.assert(result.isValid);
-    runner.assertContains(result.coordinates, '12.000000');
+    runner.assertContains(result.coordinates, '180.000000');
+    runner.assertContains(result.coordinates, '45.000000');
 });
 
 // isValidFormat for non-aladin output formats
@@ -584,6 +589,120 @@ runner.test('createPreset should list available presets in error message', () =>
     }
     runner.assert(errorMessage.includes('aladin'), 'Error should list available presets');
     runner.assert(errorMessage.includes('strict'), 'Error should list available presets');
+});
+
+// Decimal RA unit tests
+runner.test('Decimal RA should be interpreted as degrees by default', () => {
+    const sanitizer = new CoordinateSanitizer();
+    // README example: 123.456° = 8h 13m 49.44s
+    const result = sanitizer.sanitizeCoordinates('123.456, -12.345');
+    runner.assert(result.isValid, `Should accept decimal degrees RA: ${result.error}`);
+    runner.assertEqual(result.coordinates, '08 13 49.440, -12 20 42.000');
+});
+
+runner.test('Decimal RA up to 360 degrees should be accepted', () => {
+    const sanitizer = new CoordinateSanitizer();
+    const result = sanitizer.sanitizeCoordinates('359.999, +00 00 00');
+    runner.assert(result.isValid, `Should accept RA near 360°: ${result.error}`);
+
+    const outOfRange = sanitizer.sanitizeCoordinates('360.5, +00 00 00');
+    runner.assert(!outOfRange.isValid, 'Should reject RA >= 360°');
+});
+
+runner.test('raDecimalUnit "hours" should interpret decimal RA as hours', () => {
+    const sanitizer = new CoordinateSanitizer({ raDecimalUnit: 'hours' });
+    const result = sanitizer.sanitizeCoordinates('12.5, -45.75');
+    runner.assert(result.isValid);
+    runner.assertContains(result.coordinates, '12 30 00.000');
+});
+
+runner.test('raDecimalUnit "hours" decimal output should round-trip', () => {
+    const sanitizer = new CoordinateSanitizer({
+        outputFormat: 'decimal',
+        raDecimalUnit: 'hours'
+    });
+    const result = sanitizer.sanitizeCoordinates('12h 30m 00s, -45° 45\' 00"');
+    runner.assert(result.isValid);
+    runner.assertContains(result.coordinates, '12.500000');
+});
+
+// Sexagesimal component validation tests
+runner.test('Should reject minutes >= 60 in RA', () => {
+    const sanitizer = new CoordinateSanitizer();
+    const result = sanitizer.sanitizeCoordinates('12h 60m 00s, +12° 00\' 00"');
+    runner.assert(!result.isValid, 'Should reject 60 minutes in RA');
+    runner.assertContains(result.error, 'minutes out of range');
+});
+
+runner.test('Should reject seconds >= 60 in DEC', () => {
+    const sanitizer = new CoordinateSanitizer();
+    const result = sanitizer.sanitizeCoordinates('12h 00m 00s, +12° 00\' 75"');
+    runner.assert(!result.isValid, 'Should reject 75 seconds in DEC');
+    runner.assertContains(result.error, 'seconds out of range');
+});
+
+runner.test('Should reject invalid components in space-separated format', () => {
+    const sanitizer = new CoordinateSanitizer();
+    const result = sanitizer.sanitizeCoordinates('12 99 99 +12 99 99');
+    runner.assert(!result.isValid, 'Should reject 99 minutes/seconds');
+});
+
+runner.test('Should reject invalid components even with validateRanges disabled', () => {
+    const sanitizer = new CoordinateSanitizer({ validateRanges: false });
+    const result = sanitizer.sanitizeCoordinates('12h 75m 00s, +12° 00\' 00"');
+    runner.assert(!result.isValid, '75 minutes is malformed notation, not a range issue');
+});
+
+// Labeled RA/DEC format tests
+runner.test('Should parse labeled coordinates without separator', () => {
+    const sanitizer = new CoordinateSanitizer();
+    const result = sanitizer.sanitizeCoordinates('RA 05 35 17.30 DEC -05 23 28.00');
+    runner.assert(result.isValid, `Should parse labeled format: ${result.error}`);
+    runner.assertContains(result.coordinates, '05 35 17.300');
+    runner.assertContains(result.coordinates, '-05 23 28.000');
+});
+
+runner.test('Should parse labeled coordinates with colons and comma', () => {
+    const sanitizer = new CoordinateSanitizer();
+    const result = sanitizer.sanitizeCoordinates('RA: 05:35:17.30, DEC: -05:23:28.00');
+    runner.assert(result.isValid, `Should parse labeled colon format: ${result.error}`);
+    runner.assertContains(result.coordinates, '05 35 17.300');
+    runner.assertContains(result.coordinates, '-05 23 28.000');
+});
+
+runner.test('Labeled coordinates should be accepted in strict mode', () => {
+    const sanitizer = new CoordinateSanitizer({ strictMode: true });
+    const result = sanitizer.sanitizeCoordinates('RA 05 35 17.30 DEC -05 23 28.00');
+    runner.assert(result.isValid, 'Labels are unambiguous, allowed in strict mode');
+});
+
+// parse() method tests
+runner.test('parse() should return numeric coordinate values', () => {
+    const sanitizer = new CoordinateSanitizer();
+    const parsed = sanitizer.parse('05h 35m 17.30s, -05° 23\' 28.00"');
+    runner.assert(parsed !== null, 'parse() should not return null for valid coordinates');
+    runner.assert(Math.abs(parsed.raHours - 5.588139) < 1e-4, `raHours: ${parsed.raHours}`);
+    runner.assert(Math.abs(parsed.raDegrees - 83.822083) < 1e-3, `raDegrees: ${parsed.raDegrees}`);
+    runner.assert(Math.abs(parsed.decDegrees - (-5.391111)) < 1e-4, `decDegrees: ${parsed.decDegrees}`);
+});
+
+runner.test('parse() should return null for object names', () => {
+    const sanitizer = new CoordinateSanitizer();
+    runner.assert(sanitizer.parse('M31') === null, 'Object name should return null');
+});
+
+runner.test('parse() should return null for invalid input', () => {
+    const sanitizer = new CoordinateSanitizer();
+    runner.assert(sanitizer.parse('25h 00m 00s, +95° 00\' 00"') === null);
+    runner.assert(sanitizer.parse('') === null);
+});
+
+runner.test('parse() should work on already-valid input', () => {
+    const sanitizer = new CoordinateSanitizer();
+    const parsed = sanitizer.parse('12 30 00.000, +45 00 00.000');
+    runner.assert(parsed !== null, 'Already-valid aladin string should be parseable');
+    runner.assert(Math.abs(parsed.raHours - 12.5) < 1e-6, `raHours: ${parsed.raHours}`);
+    runner.assert(Math.abs(parsed.decDegrees - 45) < 1e-6, `decDegrees: ${parsed.decDegrees}`);
 });
 
 // Run all tests

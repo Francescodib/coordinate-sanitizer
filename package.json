@@ -1,17 +1,16 @@
 {
   "name": "coordinate-sanitizer",
-  "version": "1.0.5",
+  "version": "2.0.0",
   "description": "Flexible coordinate parser and sanitizer for astronomical coordinates. Handles various coordinate formats and converts them to standardized formats.",
   "main": "src/index.js",
-  "module": "src/index.js",
+  "module": "src/index.mjs",
   "types": "src/index.d.ts",
   "exports": {
     ".": {
-      "import": "./src/index.js",
+      "types": "./src/index.d.ts",
+      "import": "./src/index.mjs",
       "require": "./src/index.js",
-      "node": "./src/index.js",
-      "default": "./src/index.js",
-      "types": "./src/index.d.ts"
+      "default": "./src/index.js"
     }
   },
   "scripts": {
@@ -20,9 +19,10 @@
     "test:all": "node test/test.js && node test/integration.js",
     "test:watch": "nodemon test/test.js",
     "example": "node examples/basic-usage.js",
-    "lint": "echo 'Linting...' && echo 'No linter configured yet'",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit --strict --module commonjs --target es2020 test/types-check.ts",
     "build": "echo 'No build step required for pure ES6 modules'",
-    "prepublishOnly": "npm test",
+    "prepublishOnly": "npm run test:all && npm run lint && npm run typecheck",
     "version": "npm test && git add -A",
     "postversion": "git push && git push --tags"
   },
@@ -63,9 +63,13 @@
     "CHANGELOG.md"
   ],
   "engines": {
-    "node": ">=14.0.0"
+    "node": ">=18.0.0"
   },
   "devDependencies": {
-    "nodemon": "^3.0.0"
+    "@eslint/js": "^10.0.1",
+    "eslint": "^10.4.1",
+    "globals": "^17.6.0",
+    "nodemon": "^3.0.0",
+    "typescript": "^6.0.3"
   }
 }

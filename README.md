@@ -67,9 +67,10 @@ console.log(result3.coordinates); // "08 13 49.440, -12 20 42.000"
 ### Coordinate Formats
 - **HMS/DMS**: `12h 34m 56.78s, +12° 34' 56.78"`
 - **Colon separated**: `12:34:56.78, +12:34:56.78`
-- **Decimal**: `123.456, -12.345`
+- **Decimal degrees**: `123.456, -12.345` (RA in degrees by default; set `raDecimalUnit: 'hours'` to interpret it as hours)
 - **Compact**: `123456, -123456`
 - **Space separated**: `12 34 56.7 -45 12 34.5`
+- **Labeled**: `RA 12 34 56.7 DEC -45 12 34.5`, `RA: 12:34:56, DEC: -45:12:34`
 - **Mixed formats**: `12h 34m 56s, +12:34:56`
 
 ### Object Names
@@ -98,7 +99,10 @@ const sanitizer = new CoordinateSanitizer(options);
 - `outputFormat` (string): Output format - `'aladin'`, `'decimal'`, `'hms-dms'` (default: `'aladin'`)
 - `precision` (number): Decimal precision for output (default: `6`)
 - `validateRanges` (boolean): Enable range validation (default: `true`)
-- `strictMode` (boolean): Enable strict parsing mode (default: `false`). In strict mode, compact 6-digit formats and space-separated coordinates without an explicit separator are rejected; only unambiguous formats are accepted (HMS/DMS with markers, colon-separated, decimal).
+- `strictMode` (boolean): Enable strict parsing mode (default: `false`). In strict mode, compact 6-digit formats and space-separated coordinates without an explicit separator are rejected; only unambiguous formats are accepted (HMS/DMS with markers, colon-separated, decimal, labeled).
+- `raDecimalUnit` (string): Unit of a bare decimal RA input and of decimal RA output - `'degrees'` or `'hours'` (default: `'degrees'`, the astronomical convention for decimal coordinates)
+
+Note: regardless of `validateRanges`, sexagesimal minutes and seconds must always be in the 0-59 range; `12h 99m 00s` is rejected as malformed notation.
 
 ### Methods
 
@@ -122,6 +126,19 @@ Main method for sanitizing coordinates.
     dec: object          // DEC parsing details (if coordinates)
   }
 }
+```
+
+#### `parse(input)`
+
+Parses coordinates and returns plain numeric values, without string formatting. Returns `null` when the input is invalid or an object name.
+
+```javascript
+const sanitizer = new CoordinateSanitizer();
+const parsed = sanitizer.parse('05h 35m 17.30s, -05° 23\' 28.00"');
+console.log(parsed);
+// { raHours: 5.588139, raDegrees: 83.822083, decDegrees: -5.391111 }
+
+sanitizer.parse('M31'); // null (object name, no numeric coordinates)
 ```
 
 #### Static Methods
@@ -150,14 +167,14 @@ const aladinSanitizer = new CoordinateSanitizer({ outputFormat: 'aladin' });
 const result1 = aladinSanitizer.sanitizeCoordinates('12h 34m 56s, +12° 34\' 56"');
 console.log(result1.coordinates); // "12 34 56.000, +12 34 56.000"
 
-// Decimal format
+// Decimal format (degrees for both RA and DEC)
 const decimalSanitizer = new CoordinateSanitizer({ outputFormat: 'decimal' });
 const result2 = decimalSanitizer.sanitizeCoordinates('12h 34m 56s, +12° 34\' 56"');
-console.log(result2.coordinates); // "12.582222, 12.582222"
+console.log(result2.coordinates); // "188.733333, 12.582222"
 
-// HMS/DMS format
+// HMS/DMS format (decimal input is in degrees: RA 187.5° = 12.5h)
 const hmsSanitizer = new CoordinateSanitizer({ outputFormat: 'hms-dms' });
-const result3 = hmsSanitizer.sanitizeCoordinates('12.5, 12.5');
+const result3 = hmsSanitizer.sanitizeCoordinates('187.5, 12.5');
 console.log(result3.coordinates); // "12h 30m 00.000s, +12° 30' 00.000""
 ```
 
@@ -311,9 +328,9 @@ function safeSearch(input) {
 </script>
 ```
 
-### ES6 Modules (bundlers)
+### ES Modules
 
-When using a bundler such as webpack or Rollup, the `module` field is resolved automatically:
+The package ships a native ESM entry point, so `import` works out of the box in Node.js (`.mjs` files or `"type": "module"` projects) and in bundlers such as webpack, Rollup, and Vite:
 
 ```javascript
 import CoordinateSanitizer from 'coordinate-sanitizer';
@@ -322,26 +339,21 @@ const sanitizer = new CoordinateSanitizer();
 const result = sanitizer.sanitizeCoordinates('12h 34m 56s, +12° 34\' 56"');
 ```
 
-> **Node.js native ESM**: the package uses CommonJS (`require`). In a `.mjs` file or `"type": "module"` project use `createRequire` or a dynamic `import()` of the CJS entry point.
-
 ## TypeScript Support
 
-The library includes complete TypeScript definitions:
+The library includes complete TypeScript definitions. Types are exposed in the `CoordinateSanitizer` namespace:
 
 ```typescript
-import CoordinateSanitizer, { 
-  CoordinateSanitizerOptions, 
-  SanitizationResult 
-} from 'coordinate-sanitizer';
+import CoordinateSanitizer from 'coordinate-sanitizer';
 
-const options: CoordinateSanitizerOptions = {
+const options: CoordinateSanitizer.CoordinateSanitizerOptions = {
   outputFormat: 'decimal',
   precision: 4,
   validateRanges: true
 };
 
 const sanitizer = new CoordinateSanitizer(options);
-const result: SanitizationResult = sanitizer.sanitizeCoordinates('M31');
+const result: CoordinateSanitizer.SanitizationResult = sanitizer.sanitizeCoordinates('M31');
 ```
 
 ## Performance
@@ -384,14 +396,18 @@ Common error types:
 ## Testing
 
 ```bash
-# Unit tests (52 tests)
+# Unit tests (67 tests)
 npm test
 
-# Integration tests – round-trip, cross-format consistency, known objects (29 tests)
+# Integration tests – round-trip, cross-format consistency, known objects (33 tests)
 npm run test:integration
 
 # Full suite
 npm run test:all
+
+# Lint and type definitions check
+npm run lint
+npm run typecheck
 
 # Run examples
 npm run example
@@ -430,14 +446,23 @@ npm run example
 
 ## Stats
 
-- **Lines of code**: ~850
-- **Unit tests**: 52
-- **Integration tests**: 29 (round-trip, cross-format, known objects)
+- **Lines of code**: ~900
+- **Unit tests**: 67
+- **Integration tests**: 33 (round-trip, cross-format, known objects)
 - **Performance**: 10,000+ coordinates/second
 - **Bundle size**: Minimal (zero dependencies)
 - **Formats supported**: 15+ input variations
 
 ## Changelog
+
+### 2.0.0
+- **Breaking**: bare decimal RA input is now interpreted as degrees (the documented astronomical convention), no longer as hours; the `decimal` output format emits RA in degrees. Use the new `raDecimalUnit: 'hours'` option to restore the previous behaviour
+- Sexagesimal minutes/seconds components are now validated (`12h 99m 00s` is rejected)
+- Native ESM entry point: `import CoordinateSanitizer from 'coordinate-sanitizer'` works in Node.js
+- Fixed `exports` map ordering so TypeScript `node16`/`bundler` resolution finds the type definitions
+- New labeled input format (`RA 05 35 17.30 DEC -05 23 28.00`) and new `parse()` method returning numeric values
+- Rewritten TypeScript definitions (previous ones did not compile), ESLint and type checks added to CI
+- Minimum Node.js version raised to 18
 
 ### 1.0.4
 - Implemented `strictMode` option (was documented but had no effect)
