@@ -17,6 +17,7 @@ class CoordinateSanitizer {
       validateRanges: true,
       strictMode: false,
       raDecimalUnit: "degrees", // 'degrees' | 'hours' — unit of a bare decimal RA input
+      parseDesignations: false, // parse IAU-style J2000 designations (J053517.3-052328)
       ...options,
     };
     this.validateOptions(this.options);
@@ -28,18 +29,29 @@ class CoordinateSanitizer {
       raHMS:
         /^(\d{1,2})\s*[h:\s]\s*(\d{1,2})\s*[m:'"′\s]\s*(\d{1,2}(?:\.\d+)?)\s*[s"'″\s]*$/i,
       raHMSCompact: /^(\d{2})(\d{2})(\d{2}(?:\.\d+)?)$/,
-      raDecimal: /^(\d{1,3}(?:\.\d+)?)(?:[d°])?$/,
+      // Hours and (decimal) minutes, no seconds: "12 30", "12h 30.5m"
+      raHM: /^(\d{1,2})\s*[h:\s]\s*(\d{1,2}(?:\.\d+)?)\s*[m'′]?$/i,
+      // Optional unit suffix overrides raDecimalUnit: "187.5d", "12.5h"
+      raDecimal: /^(\d{1,3}(?:\.\d+)?)([dh°])?$/i,
 
       // DEC patterns (degrees, minutes, seconds) - more flexible with spaces
       decDMS:
         /^([+-]?\d{1,2})\s*[d°:\s]\s*(\d{1,2})\s*[m:'"′\s]\s*(\d{1,2}(?:\.\d+)?)\s*[s"'″\s]*$/i,
       decDMSCompact: /^([+-]?\d{2})(\d{2})(\d{2}(?:\.\d+)?)$/,
+      // Degrees and (decimal) minutes, no seconds: "+45 30", "-05d 23.5'"
+      decDM: /^([+-]?\d{1,2})\s*[d°:\s]\s*(\d{1,2}(?:\.\d+)?)\s*[m'′]?$/i,
       decDecimal: /^([+-]?\d{1,3}(?:\.\d+)?)(?:[d°])?$/,
 
       // Combined coordinate patterns - more flexible
       combinedPattern: /^(.+?)\s*[,;·•]\s*(.+)$/,
 
       // Labeled coordinates: "RA 12 34 56 DEC +12 34 56", "RA: 12:34:56, DEC: -05:23:28"
+      // IAU-style J2000 designation with optional catalog prefix:
+      // "J053517.30-052328.0", "2MASS J05351730-0523280" (digits beyond
+      // HHMMSS / DDMMSS are implied decimals of the seconds)
+      designationPattern:
+        /^(?:[A-Z0-9]+\s+)?J(\d{2})(\d{2})(\d{2})\.?(\d*)([+-])(\d{2})(\d{2})(\d{2})\.?(\d*)$/i,
+
       labeledPattern:
         /^RA\.?\s*[:=]?\s*(.+?)\s*[,;]?\s*DEC(?:L(?:INATION)?)?\.?\s*[:=]?\s*(.+)$/i,
     };
@@ -54,7 +66,7 @@ class CoordinateSanitizer {
       /^HIP\s?\d+$/i, // Hipparcos catalog
       /^HD\s?\d+$/i, // Henry Draper catalog
       /^SAO\s?\d+$/i, // SAO catalog
-      /^Sh2[-\s]?\d+$/i, // Sharpless nebulae
+      /^Sh\s?2[-\s]?\d+$/i, // Sharpless nebulae
       /^Barnard\s?\d+$/i, // Barnard objects
       /^PK\s?[\d+\-.]+$/i, // PK planetary nebulae
       /^LBN\s?\d+$/i, // Lynds' bright nebulae
@@ -82,6 +94,11 @@ class CoordinateSanitizer {
         "",
         "Input contains potentially malicious content"
       );
+    }
+
+    if (this.options.parseDesignations) {
+      const designation = this.parseDesignation(input.trim());
+      if (designation) return designation;
     }
 
     const cleanInput = this.cleanInput(input);
@@ -201,11 +218,13 @@ class CoordinateSanitizer {
    */
   cleanInput(input) {
     return input
-      .replace(/[""'']/g, '"')
+      .replace(/[\u201C\u201D]/g, '"')
+      .replace(/[\u2018\u2019]/g, "'")
       .replace(/[°ºª]/g, "d")
       .replace(/[′']/g, "'")
       .replace(/[″"]/g, '"')
       .replace(/[\u2013\u2014\u2212]/g, "-")
+      .replace(/([+-])\s+(?=\d)/g, "$1")
       .replace(/[·•]/g, ",")
       .replace(/\s*[,;]\s*/g, ",")
       .replace(/\s*:\s*/g, ":")
@@ -266,7 +285,30 @@ class CoordinateSanitizer {
    * @private
    */
   isNumericOnly(input) {
-    return /\d/.test(input) && /^[\d\s.,;:+\-hmsd'"]+$/i.test(input);
+    // Unit letters count only right after a digit ("12h"), so names
+    // such as "Sh 2-155" are not mistaken for coordinates
+    const withoutUnits = input.replace(/(\d)\s*[hmsd]/gi, "$1");
+    return /\d/.test(input) && /^[\d\s.,;:+\-'"]+$/.test(withoutUnits);
+  }
+
+  /**
+   * Parse an IAU-style J2000 designation. Designations are truncated, not
+   * rounded, so the position is accurate only to the last digit given.
+   * @private
+   * @returns {Object|null} Result object, or null if not a designation
+   */
+  parseDesignation(input) {
+    const m = input.match(this.patterns.designationPattern);
+    if (!m) return null;
+    const [, raH, raM, raS, raFrac, sign, decD, decM, decS, decFrac] = m;
+    const raResult = this.buildRA(raH, raM, `${raS}.${raFrac || "0"}`, "designation");
+    const decResult = this.buildDEC(
+      `${sign}${decD}`,
+      decM,
+      `${decS}.${decFrac || "0"}`,
+      "designation"
+    );
+    return this.finalizeCoordinates(raResult, decResult);
   }
 
   /**
@@ -432,12 +474,29 @@ class CoordinateSanitizer {
       }
     }
 
+    match = raPart.match(this.patterns.raHM);
+    if (match) {
+      const hours = parseInt(match[1], 10);
+      const minutes = parseFloat(match[2]);
+      if (minutes >= 60) {
+        return {
+          isValid: false,
+          error: `Invalid RA: minutes out of range: ${minutes} (must be 0-59)`,
+        };
+      }
+      const decimal = this.hmsToDecimal(hours, minutes, 0);
+      return { isValid: true, decimal, ...this.decimalToHMS(decimal), format: "hm" };
+    }
+
     match = raPart.match(this.patterns.raDecimal);
     if (match) {
       const value = parseFloat(match[1]);
-      // Bare decimal RA is in degrees by convention; convert to internal hours
-      const decimal =
-        this.options.raDecimalUnit === "hours" ? value : value / 15;
+      // An explicit unit suffix wins; a bare decimal RA uses raDecimalUnit
+      // (degrees by convention). Converted to internal hours.
+      const unit = match[2]
+        ? match[2].toLowerCase() === "h" ? "hours" : "degrees"
+        : this.options.raDecimalUnit;
+      const decimal = unit === "hours" ? value : value / 15;
       const { hours, minutes, seconds } = this.decimalToHMS(decimal);
       return {
         isValid: true,
@@ -468,6 +527,21 @@ class CoordinateSanitizer {
       if (match) {
         return this.buildDEC(match[1], match[2], match[3], "dms-compact");
       }
+    }
+
+    match = decPart.match(this.patterns.decDM);
+    if (match) {
+      const degrees = parseInt(match[1], 10);
+      const minutes = parseFloat(match[2]);
+      if (minutes >= 60) {
+        return {
+          isValid: false,
+          error: `Invalid DEC: minutes out of range: ${minutes} (must be 0-59)`,
+        };
+      }
+      const isNegative = match[1].startsWith("-");
+      const decimal = this.dmsToDecimal(degrees, minutes, 0, isNegative);
+      return { isValid: true, decimal, ...this.decimalToDMS(decimal), format: "dm" };
     }
 
     match = decPart.match(this.patterns.decDecimal);
@@ -543,7 +617,9 @@ class CoordinateSanitizer {
       Math.abs(decResult.minutes),
       Math.abs(decResult.seconds)
     );
-    const decSign = decResult.decimal >= 0 ? "+" : "-";
+    // A value that rounds to zero is printed as +00 00 00.000
+    const isZero = decD === 0 && decM === 0 && decS === 0;
+    const decSign = decResult.decimal < 0 && !isZero ? "-" : "+";
 
     const ra = `${pad(raH)}${raUnits[0]}${pad(raM)}${raUnits[1]}${sec(raS)}${raUnits[2]}`;
     const dec = `${decSign}${pad(decD)}${decUnits[0]}${pad(decM)}${decUnits[1]}${sec(decS)}${decUnits[2]}`;
@@ -569,7 +645,13 @@ class CoordinateSanitizer {
       raFormatted = (0).toFixed(precision);
     }
 
-    return `${raFormatted}, ${decResult.decimal.toFixed(precision)}`;
+    // Avoid "-0.000000" for tiny negative values
+    let decFormatted = decResult.decimal.toFixed(precision);
+    if (parseFloat(decFormatted) === 0) {
+      decFormatted = (0).toFixed(precision);
+    }
+
+    return `${raFormatted}, ${decFormatted}`;
   }
 
   /**
@@ -708,6 +790,11 @@ class CoordinateSanitizer {
         `Invalid precision: ${precision} (expected an integer between 0 and 20)`
       );
     }
+    if (typeof options.parseDesignations !== "boolean") {
+      throw new TypeError(
+        `Invalid parseDesignations: ${options.parseDesignations} (expected a boolean)`
+      );
+    }
     if (!["degrees", "hours"].includes(raDecimalUnit)) {
       throw new TypeError(
         `Invalid raDecimalUnit: "${raDecimalUnit}" (expected degrees or hours)`
@@ -737,9 +824,12 @@ class CoordinateSanitizer {
       input: [
         "HMS/DMS (12h 34m 56.78s, +12° 34' 56.78\")",
         "Decimal degrees (123.456, -12.345)",
+        "Decimal with unit suffix (12.5h, 187.5d)",
+        "Without seconds (12 30, +45 30)",
         "Compact (123456.78, -123456.78)",
         "Mixed separators (12:34:56.78, +12°34'56.78\")",
         "Labeled (RA 12 34 56.78 DEC +12 34 56.78)",
+        "IAU J2000 designations (J053517.3-052328), with parseDesignations",
         "Object names (M31, NGC 1234, etc.)",
       ],
       output: ["aladin", "decimal", "hms-dms"],
@@ -775,5 +865,9 @@ class CoordinateSanitizer {
   }
 }
 
-// Export per CommonJS (Node.js)
-module.exports = CoordinateSanitizer;
+// CommonJS export; as a plain <script> in browsers, expose a global instead
+if (typeof module !== "undefined" && module.exports) {
+  module.exports = CoordinateSanitizer;
+} else {
+  globalThis.CoordinateSanitizer = CoordinateSanitizer;
+}

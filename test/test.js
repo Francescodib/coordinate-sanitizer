@@ -667,7 +667,7 @@ test('Should parse unsigned decimal pairs as coordinates', () => {
 
 test('Should reject purely numeric input that is not parseable', () => {
     const sanitizer = new CoordinateSanitizer();
-    for (const input of ['1234', '12h 30m', '12.5h, 45']) {
+    for (const input of ['1234', '12h 30m', '12 30 45', '1, 2, 3']) {
         const result = sanitizer.sanitizeCoordinates(input);
         assert.ok(!result.isValid, `${input} should not be passed through`);
     }
@@ -756,4 +756,109 @@ test('package.json should be exposed in the exports map', () => {
     const pkg = require('coordinate-sanitizer/package.json');
     assert.strictEqual(pkg.name, 'coordinate-sanitizer');
     assert.strictEqual(require('coordinate-sanitizer'), CoordinateSanitizer);
+});
+
+// Regression (2.1.0): unit letters anywhere made "Sh 2-155" look numeric
+test('Should pass through Sharpless names written with a space', () => {
+    const sanitizer = new CoordinateSanitizer();
+    for (const input of ['Sh 2-155', 'Sh2-155', 'Sh2 155', 'sh 2 155']) {
+        const result = sanitizer.sanitizeCoordinates(input);
+        assert.ok(result.isValid, `${input}: ${result.error}`);
+        assert.strictEqual(result.metadata.inputFormat, 'object-name', input);
+        assert.strictEqual(result.coordinates, input);
+    }
+});
+
+test('Should accept typographic quotes as minute/second markers', () => {
+    const sanitizer = new CoordinateSanitizer();
+    const result = sanitizer.sanitizeCoordinates('12h 34m 56s, +12° 34’ 56”');
+    assert.strictEqual(result.coordinates, '12 34 56.000, +12 34 56.000');
+});
+
+test('Should accept whitespace between sign and value', () => {
+    const sanitizer = new CoordinateSanitizer();
+    assert.strictEqual(
+        sanitizer.sanitizeCoordinates('12 30 00, - 45 00 00').coordinates,
+        '12 30 00.000, -45 00 00.000'
+    );
+    assert.strictEqual(
+        sanitizer.sanitizeCoordinates('12 30 00 − 45 00 00').coordinates,
+        '12 30 00.000, -45 00 00.000'
+    );
+});
+
+test('Should not print negative zero', () => {
+    const decimal = new CoordinateSanitizer({ outputFormat: 'decimal' });
+    assert.strictEqual(decimal.sanitizeCoordinates('10, -0.0000001').coordinates, '10.000000, 0.000000');
+    const aladin = new CoordinateSanitizer();
+    assert.strictEqual(aladin.sanitizeCoordinates('10, -0.0000001').coordinates, '00 40 00.000, +00 00 00.000');
+    // Real small negative values keep their sign
+    assert.strictEqual(aladin.sanitizeCoordinates('10, -0.5').coordinates, '00 40 00.000, -00 30 00.000');
+    assert.strictEqual(decimal.sanitizeCoordinates('10, -0.5').coordinates, '10.000000, -0.500000');
+});
+
+test('Should parse coordinates without seconds (HH MM, DD MM)', () => {
+    const sanitizer = new CoordinateSanitizer();
+    for (const [input, expected] of [
+        ['12 30, +45 30', '12 30 00.000, +45 30 00.000'],
+        ['12h 30m, -05d 23m', '12 30 00.000, -05 23 00.000'],
+        ['12:30, -00:30', '12 30 00.000, -00 30 00.000'],
+        ['12h 30.5m, +45° 30.25\'', '12 30 30.000, +45 30 15.000'],
+        ['12h30m, +45d', '12 30 00.000, +45 00 00.000'],
+    ]) {
+        const result = sanitizer.sanitizeCoordinates(input);
+        assert.ok(result.isValid, `${input}: ${result.error}`);
+        assert.strictEqual(result.coordinates, expected, input);
+    }
+    assert.ok(!sanitizer.sanitizeCoordinates('12 75, +45 30').isValid, 'minutes >= 60');
+    assert.ok(!sanitizer.sanitizeCoordinates('12 30, +45 60').isValid, 'minutes >= 60');
+});
+
+test('Should honour an explicit unit suffix on decimal RA', () => {
+    const degrees = new CoordinateSanitizer();
+    const hours = new CoordinateSanitizer({ raDecimalUnit: 'hours' });
+    for (const sanitizer of [degrees, hours]) {
+        assert.strictEqual(sanitizer.sanitizeCoordinates('12.5h, 45').coordinates, '12 30 00.000, +45 00 00.000');
+        assert.strictEqual(sanitizer.sanitizeCoordinates('187.5d, 45').coordinates, '12 30 00.000, +45 00 00.000');
+        assert.strictEqual(sanitizer.sanitizeCoordinates('187.5°, 45').coordinates, '12 30 00.000, +45 00 00.000');
+    }
+    assert.ok(!degrees.sanitizeCoordinates('25h, 45').isValid, 'RA 25h out of range');
+});
+
+test('Designations should be object names unless parseDesignations is set', () => {
+    const sanitizer = new CoordinateSanitizer();
+    const result = sanitizer.sanitizeCoordinates('J053517.3-052328');
+    assert.strictEqual(result.metadata.inputFormat, 'object-name');
+    assert.strictEqual(result.coordinates, 'J053517.3-052328');
+});
+
+test('Should parse IAU J2000 designations when enabled', () => {
+    const sanitizer = new CoordinateSanitizer({ parseDesignations: true });
+    for (const [input, expected] of [
+        ['J053517.3-052328', '05 35 17.300, -05 23 28.000'],
+        ['SDSS J053517.30-052328.0', '05 35 17.300, -05 23 28.000'],
+        ['2MASS J05351730-0523280', '05 35 17.300, -05 23 28.000'],
+        ['J123000+450000', '12 30 00.000, +45 00 00.000'],
+    ]) {
+        const result = sanitizer.sanitizeCoordinates(input);
+        assert.ok(result.isValid, `${input}: ${result.error}`);
+        assert.strictEqual(result.coordinates, expected, input);
+        assert.strictEqual(result.metadata.ra.format, 'designation');
+    }
+    assert.ok(!sanitizer.sanitizeCoordinates('J253517.3-052328').isValid, 'RA 25h');
+    assert.strictEqual(sanitizer.sanitizeCoordinates('M31').metadata.inputFormat, 'object-name');
+    assert.throws(() => new CoordinateSanitizer({ parseDesignations: 'yes' }), TypeError);
+});
+
+test('Should expose a global when loaded as a plain browser script', () => {
+    const vm = require('node:vm');
+    const fs = require('node:fs');
+    const path = require('node:path');
+    const context = vm.createContext({});
+    vm.runInContext(fs.readFileSync(path.join(__dirname, '../src/index.js'), 'utf8'), context);
+    const result = vm.runInContext(
+        "new globalThis.CoordinateSanitizer().sanitizeCoordinates('10, 20').coordinates",
+        context
+    );
+    assert.strictEqual(result, '00 40 00.000, +20 00 00.000');
 });

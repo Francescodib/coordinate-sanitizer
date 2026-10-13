@@ -13,6 +13,7 @@ const sanitizer = new CoordinateSanitizer({
   validateRanges: true,
   strictMode: false,
   raDecimalUnit: "degrees",
+  parseDesignations: false,
 });
 
 // Options are readable and fully resolved
