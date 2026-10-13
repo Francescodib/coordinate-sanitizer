@@ -456,7 +456,7 @@ npm run example
 
 ## Changelog
 
-### Unreleased
+### 2.1.0
 - **Breaking**: minimum Node.js version raised to 20 (18 is end-of-life)
 - **Breaking**: the constructor throws on unknown `outputFormat` / `raDecimalUnit` and on a `precision` that is not an integer between 0 and 20; `options` is frozen
 - **Breaking**: purely numeric input that cannot be parsed (e.g. `1234`, `12h 30m`) now returns an error instead of being passed through as an object name
