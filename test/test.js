@@ -750,3 +750,10 @@ test('Options should be immutable after construction', () => {
     const sanitizer = new CoordinateSanitizer();
     assert.ok(Object.isFrozen(sanitizer.options));
 });
+
+// Package self-reference resolves through the "exports" map
+test('package.json should be exposed in the exports map', () => {
+    const pkg = require('coordinate-sanitizer/package.json');
+    assert.strictEqual(pkg.name, 'coordinate-sanitizer');
+    assert.strictEqual(require('coordinate-sanitizer'), CoordinateSanitizer);
+});

@@ -11,7 +11,8 @@
       "import": "./src/index.mjs",
       "require": "./src/index.js",
       "default": "./src/index.js"
-    }
+    },
+    "./package.json": "./package.json"
   },
   "scripts": {
     "test": "node --test test/test.js",
