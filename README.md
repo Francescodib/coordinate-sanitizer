@@ -30,7 +30,7 @@ npm install coordinate-sanitizer
 - **Unicode Support**: Handles various Unicode symbols and separators
 - **High Performance**: Optimized for batch processing
 - **Zero Dependencies**: Lightweight with no external dependencies
-- **Universal**: Works in Node.js and browsers
+- **Universal**: Works in Node.js and browsers (via `<script>` or a bundler)
 - **TypeScript Support**: Includes complete TypeScript definitions
 
 ## Quick Start
@@ -335,9 +335,11 @@ function safeSearch(input) {
 
 ## Browser Usage
 
+The library is plain JavaScript with no Node.js-specific APIs, so it can run client-side, e.g. to validate coordinates typed into a form before passing them to Aladin Lite or a backend. There are two supported ways to load it in a browser.
+
 ### Script Tag
 
-Loaded as a plain script, the library defines a global `CoordinateSanitizer`:
+Loaded as a classic script, the library defines a global `CoordinateSanitizer`. Pin an exact version in production (`@2` follows the latest 2.x release):
 
 ```html
 <script src="https://unpkg.com/coordinate-sanitizer@2/src/index.js"></script>
@@ -348,15 +350,36 @@ Loaded as a plain script, the library defines a global `CoordinateSanitizer`:
 </script>
 ```
 
-### ES Modules
+### Bundlers (webpack, Vite, Rollup, esbuild)
 
-The package ships a native ESM entry point, so `import` works out of the box in Node.js (`.mjs` files or `"type": "module"` projects) and in bundlers such as webpack, Rollup, and Vite:
+In a bundled frontend project, install the package and import it; the bundler resolves it through the `exports` map and includes it in your bundle:
 
 ```javascript
 import CoordinateSanitizer from 'coordinate-sanitizer';
 
 const sanitizer = new CoordinateSanitizer();
 const result = sanitizer.sanitizeCoordinates('12h 34m 56s, +12° 34\' 56"');
+```
+
+### Native `<script type="module">` (not supported)
+
+Importing the package directly in the browser without a bundler does **not** work:
+
+```html
+<!-- Fails: "The requested module './index.js' does not provide an export named 'default'" -->
+<script type="module">
+  import CoordinateSanitizer from 'https://unpkg.com/coordinate-sanitizer@2/src/index.mjs';
+</script>
+```
+
+The ESM entry point (`src/index.mjs`) re-exports the CommonJS implementation, which Node.js and bundlers can convert but browsers cannot. Use the classic script tag or a bundler instead.
+
+## ES Modules in Node.js
+
+The package ships an ESM entry point, so `import` works out of the box in Node.js (`.mjs` files or `"type": "module"` projects):
+
+```javascript
+import CoordinateSanitizer from 'coordinate-sanitizer';
 ```
 
 ## TypeScript Support
