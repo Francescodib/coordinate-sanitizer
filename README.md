@@ -473,6 +473,9 @@ npm run example
 
 ## Changelog
 
+### 2.1.1
+- `package.json` is exposed in the `exports` map (`require('coordinate-sanitizer/package.json')` no longer throws)
+
 ### 2.1.0
 - **Breaking**: minimum Node.js version raised to 20 (18 is end-of-life)
 - **Breaking**: the constructor throws on unknown `outputFormat` / `raDecimalUnit` and on a `precision` that is not an integer between 0 and 20; `options` is frozen
