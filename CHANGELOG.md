@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.2.0] - 2026-10-13
+
+### Added
+- Coordinates without seconds: `12 30, +45 30`, `12h 30m, -05d 23m`, with optional decimal minutes (`12h 30.5m`). An explicit RA/DEC separator is required.
+- Explicit unit suffix on decimal RA: `12.5h` is always hours and `187.5d` / `187.5°` always degrees, regardless of `raDecimalUnit`.
+- `parseDesignations` option (default `false`): parses IAU-style J2000 designations such as `J053517.3-052328`, `SDSS J053517.30-052328.0` and `2MASS J05351730-0523280` (implied decimals) as coordinates. Designations are truncated, not rounded, so the position is only as accurate as the last digit.
+- When loaded as a plain browser `<script>`, the library defines a global `CoordinateSanitizer`.
+
+### Fixed
+- Regression in 2.1.0: `Sh 2-155` (and any name whose letters are only h/m/s/d) was treated as malformed coordinates and rejected. Unit letters now count only right after a digit; the Sharpless catalog pattern also accepts the space form.
+- Loading `src/index.js` as a plain `<script>` threw `ReferenceError: module is not defined`. The README example also pointed to a file that does not exist in the package.
+- Input normalization used ASCII quotes where typographic quotes were intended, so `’` and `”` were not recognized as minute/second markers and every `'` was rewritten to `"`.
+- Whitespace between a sign and its value (`- 45 00 00`, `− 45 00 00` with a Unicode minus) is now accepted.
+- Values that round to zero no longer print a negative sign (`-0.000000`, `-00 00 00.000`).
+
 ## [2.1.1] - 2026-10-13
 
 ### Fixed

@@ -68,6 +68,9 @@ console.log(result3.coordinates); // "08 13 49.440, -12 20 42.000"
 - **HMS/DMS**: `12h 34m 56.78s, +12° 34' 56.78"`
 - **Colon separated**: `12:34:56.78, +12:34:56.78`
 - **Decimal degrees**: `123.456, -12.345` (RA in degrees by default; set `raDecimalUnit: 'hours'` to interpret it as hours)
+- **Decimal with unit suffix**: `12.5h, 45` or `187.5d, 45` (an explicit `h`/`d`/`°` suffix overrides `raDecimalUnit`)
+- **Without seconds**: `12 30, +45 30`, `12h 30.5m, -05° 23'` (requires an explicit separator)
+- **IAU J2000 designations** (opt-in, `parseDesignations: true`): `J053517.3-052328`, `SDSS J053517.30-052328.0`, `2MASS J05351730-0523280`
 - **Compact**: `123456, -123456`
 - **Space separated**: `12 34 56.7 -45 12 34.5`
 - **Labeled**: `RA 12 34 56.7 DEC -45 12 34.5`, `RA: 12:34:56, DEC: -45:12:34`
@@ -102,9 +105,10 @@ const sanitizer = new CoordinateSanitizer(options);
 - `precision` (number): Decimal precision for output, integer between `0` and `20` (default: `6`)
 - `validateRanges` (boolean): Enable range validation (default: `true`)
 - `strictMode` (boolean): Enable strict parsing mode (default: `false`). In strict mode, compact 6-digit formats and space-separated coordinates without an explicit separator are rejected; only unambiguous formats are accepted (HMS/DMS with markers, colon-separated, decimal, labeled).
+- `parseDesignations` (boolean): Parse IAU-style J2000 designations as coordinates instead of passing them through as object names (default: `false`). Designations are truncated, not rounded, so the position is only as accurate as the last digit given.
 - `raDecimalUnit` (string): Unit of a bare decimal RA input and of decimal RA output - `'degrees'` or `'hours'` (default: `'degrees'`, the astronomical convention for decimal coordinates)
 
-The constructor throws a `TypeError` for an unknown `outputFormat` or `raDecimalUnit` and a `RangeError` for an invalid `precision`. The resolved `options` object is frozen.
+The constructor throws a `TypeError` for an unknown `outputFormat` or `raDecimalUnit`, a non-boolean `parseDesignations`, and a `RangeError` for an invalid `precision`. The resolved `options` object is frozen.
 
 Note: regardless of `validateRanges`, sexagesimal minutes and seconds must always be in the 0-59 range; `12h 99m 00s` is rejected as malformed notation.
 
@@ -333,8 +337,10 @@ function safeSearch(input) {
 
 ### Script Tag
 
+Loaded as a plain script, the library defines a global `CoordinateSanitizer`:
+
 ```html
-<script src="path/to/coordinate-sanitizer.js"></script>
+<script src="https://unpkg.com/coordinate-sanitizer@2/src/index.js"></script>
 <script>
   const sanitizer = new CoordinateSanitizer();
   const result = sanitizer.sanitizeCoordinates('M31');
@@ -410,7 +416,7 @@ Invalid constructor options throw instead of returning an error result.
 ## Testing
 
 ```bash
-# Unit tests (79 tests)
+# Unit tests (89 tests)
 npm test
 
 # Integration tests – round-trip, cross-format consistency, known objects (33 tests)
@@ -465,13 +471,20 @@ npm run example
 ## Stats
 
 - **Lines of code**: ~780
-- **Unit tests**: 79
+- **Unit tests**: 89
 - **Integration tests**: 33 (round-trip, cross-format, known objects)
 - **Performance**: 10,000+ coordinates/second
 - **Bundle size**: Minimal (zero dependencies)
 - **Formats supported**: 15+ input variations
 
 ## Changelog
+
+### 2.2.0
+- Inputs without seconds (`12 30, +45 30`), decimal RA with an explicit unit suffix (`12.5h`, `187.5d`)
+- Opt-in parsing of IAU J2000 designations (`parseDesignations: true`)
+- Fixed: `Sh 2-155` was rejected as malformed coordinates (regression in 2.1.0)
+- Fixed: plain `<script>` loading threw `module is not defined`; it now defines a global
+- Fixed: typographic quotes are normalized correctly; whitespace after a sign (`- 45 00 00`) is accepted; no more negative zero (`-0.000000`, `-00 00 00.000`)
 
 ### 2.1.1
 - `package.json` is exposed in the `exports` map (`require('coordinate-sanitizer/package.json')` no longer throws)

@@ -79,6 +79,13 @@ declare namespace CoordinateSanitizer {
      * Defaults to 'degrees', the astronomical convention for decimal coordinates.
      */
     raDecimalUnit?: "degrees" | "hours";
+    /**
+     * Parse IAU-style J2000 designations ("J053517.3-052328",
+     * "2MASS J05351730-0523280") as coordinates instead of passing them
+     * through as object names. Designations are truncated, so the position
+     * is only as accurate as the last digit. Defaults to false.
+     */
+    parseDesignations?: boolean;
   }
 
   interface CoordinateComponent {
