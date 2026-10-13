@@ -80,6 +80,8 @@ console.log(result3.coordinates); // "08 13 49.440, -12 20 42.000"
 - **Other catalogs**: `HD 209458`, `HIP 27989`, `SAO 123456`
 - **Named stars**: `Polaris`, `Vega`, `51 Eri`
 
+Object names are returned as typed (trimmed, repeated whitespace collapsed). Input made only of digits, signs, separators and unit markers is never treated as an object name: if it cannot be parsed (e.g. `1234`, `12h 30m`) an error is returned.
+
 ### Separators
 Supports multiple separators between RA and DEC:
 - Comma: `,`
@@ -97,10 +99,12 @@ const sanitizer = new CoordinateSanitizer(options);
 
 **Options:**
 - `outputFormat` (string): Output format - `'aladin'`, `'decimal'`, `'hms-dms'` (default: `'aladin'`)
-- `precision` (number): Decimal precision for output (default: `6`)
+- `precision` (number): Decimal precision for output, integer between `0` and `20` (default: `6`)
 - `validateRanges` (boolean): Enable range validation (default: `true`)
 - `strictMode` (boolean): Enable strict parsing mode (default: `false`). In strict mode, compact 6-digit formats and space-separated coordinates without an explicit separator are rejected; only unambiguous formats are accepted (HMS/DMS with markers, colon-separated, decimal, labeled).
 - `raDecimalUnit` (string): Unit of a bare decimal RA input and of decimal RA output - `'degrees'` or `'hours'` (default: `'degrees'`, the astronomical convention for decimal coordinates)
+
+The constructor throws a `TypeError` for an unknown `outputFormat` or `raDecimalUnit` and a `RangeError` for an invalid `precision`. The resolved `options` object is frozen.
 
 Note: regardless of `validateRanges`, sexagesimal minutes and seconds must always be in the 0-59 range; `12h 99m 00s` is rejected as malformed notation.
 
@@ -122,11 +126,13 @@ Main method for sanitizing coordinates.
   metadata: {            // Additional information about the parsing
     inputFormat: string, // 'coordinates', 'object-name', 'already-valid'
     outputFormat: string,// Output format used
-    ra: object,          // RA parsing details (if coordinates)
-    dec: object          // DEC parsing details (if coordinates)
+    ra: object,          // RA parsing details (if coordinates or already-valid)
+    dec: object          // DEC parsing details (if coordinates or already-valid)
   }
 }
 ```
+
+`inputFormat` is `'already-valid'` when the input is identical to the canonical output for the configured format (e.g. `'12 34 56.000, +12 34 56.000'` with `aladin`). The input is still fully parsed and range-validated.
 
 #### `parse(input)`
 
@@ -140,6 +146,14 @@ console.log(parsed);
 
 sanitizer.parse('M31'); // null (object name, no numeric coordinates)
 ```
+
+#### `isValidFormat(input)`
+
+Returns `true` if `sanitizeCoordinates(input)` would return the input unchanged: valid, in range, and in the exact layout and precision of the configured output format.
+
+#### `looksLikeCoordinates(input)`
+
+Heuristic used to decide between coordinate parsing and object-name passthrough. Returns `false` for known catalog designations (`M31`, `NGC 1976`, ...).
 
 #### Static Methods
 
@@ -377,7 +391,7 @@ This is input hardening, not output encoding: object names are passed through as
 The library provides detailed error messages for debugging:
 
 ```javascript
-const result = sanitizer.sanitizeCoordinates('invalid input');
+const result = sanitizer.sanitizeCoordinates('25h 00m 00s, +00 00 00');
 if (!result.isValid) {
   console.log(`Error: ${result.error}`);
   // Handle error appropriately
@@ -385,10 +399,13 @@ if (!result.isValid) {
 ```
 
 Common error types:
-- Invalid coordinate format
+- Invalid coordinate format (including unparseable numeric input)
 - Out of range values (RA > 24h, DEC > ±90°)
-- Malformed input strings
-- Security violations
+- Malformed sexagesimal components (minutes/seconds outside 0-59)
+- Extra components or unexpected text in space-separated input
+- Rejected input (control characters, HTML tags, `javascript:`)
+
+Invalid constructor options throw instead of returning an error result.
 
 ## Testing
 
@@ -447,7 +464,7 @@ npm run example
 
 ## Stats
 
-- **Lines of code**: ~900
+- **Lines of code**: ~780
 - **Unit tests**: 79
 - **Integration tests**: 33 (round-trip, cross-format, known objects)
 - **Performance**: 10,000+ coordinates/second
