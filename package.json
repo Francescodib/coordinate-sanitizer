@@ -14,16 +14,16 @@
     }
   },
   "scripts": {
-    "test": "node test/test.js",
-    "test:integration": "node test/integration.js",
-    "test:all": "node test/test.js && node test/integration.js",
-    "test:watch": "nodemon test/test.js",
+    "test": "node --test test/test.js",
+    "test:integration": "node --test test/integration.js",
+    "test:all": "node --test test/test.js test/integration.js",
+    "test:watch": "node --test --watch test/test.js test/integration.js",
+    "test:coverage": "node --test --experimental-test-coverage test/test.js test/integration.js",
     "example": "node examples/basic-usage.js",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit --strict --module commonjs --target es2020 test/types-check.ts",
-    "build": "echo 'No build step required for pure ES6 modules'",
     "prepublishOnly": "npm run test:all && npm run lint && npm run typecheck",
-    "version": "npm test && git add -A",
+    "version": "npm run test:all && git add CHANGELOG.md",
     "postversion": "git push && git push --tags"
   },
   "keywords": [
@@ -63,13 +63,12 @@
     "CHANGELOG.md"
   ],
   "engines": {
-    "node": ">=18.0.0"
+    "node": ">=20.0.0"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "eslint": "^10.4.1",
     "globals": "^17.6.0",
-    "nodemon": "^3.0.0",
     "typescript": "^6.0.3"
   }
 }

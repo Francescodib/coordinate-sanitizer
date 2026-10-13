@@ -5,6 +5,27 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed (breaking)
+- Minimum supported Node.js version raised from 18 (end-of-life) to 20; CI now tests Node 20, 22 and 24.
+- The constructor validates its options: unknown `outputFormat` or `raDecimalUnit` throws a `TypeError`, a `precision` that is not an integer between 0 and 20 throws a `RangeError` (previously `toFixed` failed later, or an unknown format silently fell back to `aladin`). `options` is now frozen, matching its `readonly` type.
+- Purely numeric input that cannot be parsed as coordinates (e.g. `1234`, `12h 30m`, `12.5h, 45`) now returns an error instead of being passed through as an object name.
+
+### Fixed
+- Unsigned decimal pairs such as `10, 20`, `10.5, 20` or `180, 45` were not recognized as coordinates and were returned as (mangled) object names with `isValid: true`.
+- RA values rounding up to 24h (e.g. `23h 59m 59.9999s`, `359.9999999`) produced `24 00 00.000` / `360.000000`; they now wrap to `00 00 00.000` / `0.000000`.
+- The "already-valid" shortcut bypassed range validation (`12 34 56.000, +95 34 56.000` was accepted) and ignored `precision` for decimal output. Input is now always fully parsed; `inputFormat: 'already-valid'` is reported when the canonical output equals the input, and such results now include `ra`/`dec` metadata. `isValidFormat()` follows the same rule.
+- Space-separated parsing used the first six numbers and ignored the rest (`12 34 56.1 +12 34 56.7 garbage 99` was accepted). Extra components, non-unit text, and a signed RA are now rejected.
+- Object names are returned as typed (trimmed, whitespace collapsed) instead of with quotes and separators rewritten by the internal normalization.
+- Removed the `on\w+=` "event handler" pattern from the malicious-content check: it produced false positives and gave no real protection. Output must be escaped by the consumer regardless (see README, Security).
+
+### Changed
+- Internal refactoring: shared sexagesimal component parsing, carry normalization and formatting between RA/DEC and between the `aladin`/`hms-dms` formats.
+- Tests migrated from a custom runner to the built-in `node:test` runner; added `test:watch` and `test:coverage` scripts and removed the `nodemon` dev dependency. 12 new regression tests.
+- Publish workflow: removed OIDC debug steps, pinned npm to v11, added lint and type checks before publishing.
+- The `version` script now stages only `CHANGELOG.md` instead of `git add -A`.
+
 ## [2.0.0] - 2026-06-11
 
 ### Changed (breaking)

@@ -9,6 +9,8 @@ declare class CoordinateSanitizer {
   /**
    * Create a new CoordinateSanitizer instance
    * @param options Configuration options
+   * @throws {TypeError} If outputFormat or raDecimalUnit is unknown
+   * @throws {RangeError} If precision is not an integer between 0 and 20
    */
   constructor(options?: CoordinateSanitizer.CoordinateSanitizerOptions);
 
@@ -34,9 +36,10 @@ declare class CoordinateSanitizer {
   looksLikeCoordinates(input: string): boolean;
 
   /**
-   * Check if input is already in valid format for the configured output
+   * Check if input is already identical to the canonical output for the
+   * configured format (valid, in range, same precision and layout)
    * @param input Input string to check
-   * @returns True if input is already in the target format
+   * @returns True if sanitizing the input would return it unchanged
    */
   isValidFormat(input: string): boolean;
 
@@ -61,7 +64,7 @@ declare namespace CoordinateSanitizer {
   interface CoordinateSanitizerOptions {
     /** Output format for coordinates */
     outputFormat?: "aladin" | "decimal" | "hms-dms";
-    /** Decimal precision for output */
+    /** Decimal precision for output (integer, 0-20) */
     precision?: number;
     /** Enable range validation */
     validateRanges?: boolean;
@@ -110,9 +113,9 @@ declare namespace CoordinateSanitizer {
       inputFormat?: "coordinates" | "object-name" | "already-valid";
       /** Output format used */
       outputFormat?: string;
-      /** RA parsing details (if coordinates) */
+      /** RA parsing details (if coordinates or already-valid) */
       ra?: CoordinateComponent;
-      /** DEC parsing details (if coordinates) */
+      /** DEC parsing details (if coordinates or already-valid) */
       dec?: CoordinateComponent;
     };
   }

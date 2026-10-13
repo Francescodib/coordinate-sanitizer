@@ -17,67 +17,19 @@
 
 'use strict';
 
+const { test } = require('node:test');
+const assert = require('node:assert/strict');
 const CoordinateSanitizer = require('../src/index.js');
 
-// ─── Minimal test runner ──────────────────────────────────────────────────────
+// ─── Assertion helpers ────────────────────────────────────────────────────────
 
-class TestRunner {
-    constructor() {
-        this.tests  = [];
-        this.passed = 0;
-        this.failed = 0;
-    }
-
-    test(description, fn) {
-        this.tests.push({ description, fn });
-    }
-
-    async run() {
-        console.log('Integration Tests – Coordinate Sanitizer');
-        console.log('='.repeat(60));
-
-        for (const { description, fn } of this.tests) {
-            try {
-                await fn();
-                console.log(`+ ${description}`);
-                this.passed++;
-            } catch (error) {
-                console.log(`- ${description}`);
-                console.log(`  Error: ${error.message}`);
-                this.failed++;
-            }
-        }
-
-        console.log('\n' + '='.repeat(60));
-        console.log(`Results: ${this.passed} passed, ${this.failed} failed`);
-
-        if (this.failed > 0) {
-            console.log(`\nFailed: ${this.failed}`);
-            process.exit(1);
-        } else {
-            console.log('\nAll integration tests passed!');
-        }
-    }
-
-    assert(condition, message) {
-        if (!condition) throw new Error(message || 'Assertion failed');
-    }
-
-    assertEqual(actual, expected, message) {
-        if (actual !== expected)
-            throw new Error(
-                `${message || 'Values not equal'}: expected "${expected}", got "${actual}"`
-            );
-    }
-
-    assertNear(actual, expected, tolerance, message) {
-        const diff = Math.abs(actual - expected);
-        if (diff > tolerance)
-            throw new Error(
-                `${message || 'Values not near enough'}: ` +
-                `expected ${expected} ± ${tolerance}, got ${actual} (diff: ${diff})`
-            );
-    }
+function assertNear(actual, expected, tolerance, message) {
+    const diff = Math.abs(actual - expected);
+    assert.ok(
+        diff <= tolerance,
+        `${message || 'Values not near enough'}: ` +
+        `expected ${expected} ± ${tolerance}, got ${actual} (diff: ${diff})`
+    );
 }
 
 // ─── Output-string parsers ────────────────────────────────────────────────────
@@ -234,31 +186,30 @@ const NEG_DEC_CASES = [
 
 // ─── Test suite ───────────────────────────────────────────────────────────────
 
-const runner = new TestRunner();
 
 // 1. Round-trip idempotency ---------------------------------------------------
 
 for (const fmt of OUTPUT_FORMATS) {
     for (const { label, value } of INPUT_VARIANTS) {
-        runner.test(`Round-trip [${fmt}]: ${label}`, () => {
+        test(`Round-trip [${fmt}]: ${label}`, () => {
             const sanitizer = new CoordinateSanitizer({ outputFormat: fmt });
 
             const first = sanitizer.sanitizeCoordinates(value);
-            runner.assert(first.isValid,
+            assert.ok(first.isValid,
                 `First parse failed: ${first.error}`);
-            runner.assert(
+            assert.ok(
                 first.metadata.inputFormat === 'coordinates' ||
                 first.metadata.inputFormat === 'already-valid',
                 `Expected "coordinates" or "already-valid", got "${first.metadata.inputFormat}"`
             );
 
             const second = sanitizer.sanitizeCoordinates(first.coordinates);
-            runner.assert(second.isValid,
+            assert.ok(second.isValid,
                 `Re-parse of "${first.coordinates}" failed: ${second.error}`);
-            runner.assertEqual(second.metadata.inputFormat, 'already-valid',
+            assert.strictEqual(second.metadata.inputFormat, 'already-valid',
                 `Re-parsed output should be "already-valid" for format "${fmt}", ` +
                 `got "${second.metadata.inputFormat}" for input "${first.coordinates}"`);
-            runner.assertEqual(second.coordinates, first.coordinates,
+            assert.strictEqual(second.coordinates, first.coordinates,
                 `Round-trip not stable for format "${fmt}": ` +
                 `"${first.coordinates}" → "${second.coordinates}"`);
         });
@@ -268,25 +219,25 @@ for (const fmt of OUTPUT_FORMATS) {
 // 2. Cross-format mathematical consistency ------------------------------------
 
 for (const { label, value } of INPUT_VARIANTS) {
-    runner.test(`Cross-format consistency: ${label}`, () => {
+    test(`Cross-format consistency: ${label}`, () => {
         const results = {};
         for (const fmt of OUTPUT_FORMATS) {
             const r = new CoordinateSanitizer({ outputFormat: fmt })
                 .sanitizeCoordinates(value);
-            runner.assert(r.isValid, `Parse failed for format "${fmt}": ${r.error}`);
+            assert.ok(r.isValid, `Parse failed for format "${fmt}": ${r.error}`);
             results[fmt] = extractCoords(r.coordinates, fmt);
         }
 
         // All three formats must encode the same RA
-        runner.assertNear(results['aladin'].ra_h, results['decimal'].ra_h,
+        assertNear(results['aladin'].ra_h, results['decimal'].ra_h,
             TOLERANCE_DEG, `RA: aladin vs decimal (${label})`);
-        runner.assertNear(results['aladin'].ra_h, results['hms-dms'].ra_h,
+        assertNear(results['aladin'].ra_h, results['hms-dms'].ra_h,
             TOLERANCE_DEG, `RA: aladin vs hms-dms (${label})`);
 
         // All three formats must encode the same DEC
-        runner.assertNear(results['aladin'].dec_deg, results['decimal'].dec_deg,
+        assertNear(results['aladin'].dec_deg, results['decimal'].dec_deg,
             TOLERANCE_DEG, `DEC: aladin vs decimal (${label})`);
-        runner.assertNear(results['aladin'].dec_deg, results['hms-dms'].dec_deg,
+        assertNear(results['aladin'].dec_deg, results['hms-dms'].dec_deg,
             TOLERANCE_DEG, `DEC: aladin vs hms-dms (${label})`);
     });
 }
@@ -294,15 +245,15 @@ for (const { label, value } of INPUT_VARIANTS) {
 // 3. Known-object accuracy ----------------------------------------------------
 
 for (const { name, input, ra_h, dec_deg } of KNOWN_OBJECTS) {
-    runner.test(`Known object: ${name}`, () => {
+    test(`Known object: ${name}`, () => {
         const sanitizer = new CoordinateSanitizer({ outputFormat: 'aladin' });
         const result = sanitizer.sanitizeCoordinates(input);
-        runner.assert(result.isValid, `Parse failed: ${result.error}`);
+        assert.ok(result.isValid, `Parse failed: ${result.error}`);
 
         const computed = parseAladin(result.coordinates);
-        runner.assertNear(computed.ra_h,    ra_h,    TOLERANCE_DEG,
+        assertNear(computed.ra_h,    ra_h,    TOLERANCE_DEG,
             `${name}: RA (hours)`);
-        runner.assertNear(computed.dec_deg, dec_deg, TOLERANCE_DEG,
+        assertNear(computed.dec_deg, dec_deg, TOLERANCE_DEG,
             `${name}: DEC (degrees)`);
     });
 }
@@ -310,26 +261,26 @@ for (const { name, input, ra_h, dec_deg } of KNOWN_OBJECTS) {
 // 4. Negative DEC round-trips -------------------------------------------------
 
 for (const { label, input } of NEG_DEC_CASES) {
-    runner.test(`Negative DEC round-trip: ${label}`, () => {
+    test(`Negative DEC round-trip: ${label}`, () => {
         for (const fmt of OUTPUT_FORMATS) {
             const sanitizer = new CoordinateSanitizer({ outputFormat: fmt });
 
             const first = sanitizer.sanitizeCoordinates(input);
-            runner.assert(first.isValid,
+            assert.ok(first.isValid,
                 `First parse failed for format "${fmt}": ${first.error}`);
-            runner.assert(first.metadata.dec.decimal < 0,
+            assert.ok(first.metadata.dec.decimal < 0,
                 `DEC should be negative (${label}, ${fmt}): ` +
                 `got ${first.metadata.dec.decimal}`);
 
             const second = sanitizer.sanitizeCoordinates(first.coordinates);
-            runner.assert(second.isValid,
+            assert.ok(second.isValid,
                 `Re-parse failed for format "${fmt}": ${second.error}`);
-            runner.assertEqual(second.coordinates, first.coordinates,
+            assert.strictEqual(second.coordinates, first.coordinates,
                 `Round-trip not stable for format "${fmt}" with ${label}`);
 
             // Verify sign is preserved in re-parsed output
             const coords = extractCoords(second.coordinates, fmt);
-            runner.assert(coords.dec_deg < 0,
+            assert.ok(coords.dec_deg < 0,
                 `DEC sign lost after round-trip (${label}, ${fmt}): ` +
                 `got ${coords.dec_deg}`);
         }
@@ -338,23 +289,23 @@ for (const { label, input } of NEG_DEC_CASES) {
 
 // 5. strictMode round-trips ---------------------------------------------------
 
-runner.test('strictMode: round-trip idempotency for all output formats', () => {
+test('strictMode: round-trip idempotency for all output formats', () => {
     const input = "12h 34m 56.78s, +12° 34' 56.78\"";
     for (const fmt of OUTPUT_FORMATS) {
         const sanitizer = new CoordinateSanitizer({ outputFormat: fmt, strictMode: true });
 
         const first = sanitizer.sanitizeCoordinates(input);
-        runner.assert(first.isValid,
+        assert.ok(first.isValid,
             `strictMode first parse failed (${fmt}): ${first.error}`);
-        runner.assertEqual(first.metadata.inputFormat, 'coordinates',
+        assert.strictEqual(first.metadata.inputFormat, 'coordinates',
             `Expected "coordinates", got "${first.metadata.inputFormat}" (${fmt})`);
 
         const second = sanitizer.sanitizeCoordinates(first.coordinates);
-        runner.assert(second.isValid,
+        assert.ok(second.isValid,
             `strictMode re-parse failed (${fmt}): ${second.error}`);
-        runner.assertEqual(second.metadata.inputFormat, 'already-valid',
+        assert.strictEqual(second.metadata.inputFormat, 'already-valid',
             `strictMode: re-parsed output should be "already-valid" (${fmt})`);
-        runner.assertEqual(second.coordinates, first.coordinates,
+        assert.strictEqual(second.coordinates, first.coordinates,
             `strictMode: round-trip not stable (${fmt})`);
     }
 });
@@ -363,26 +314,19 @@ runner.test('strictMode: round-trip idempotency for all output formats', () => {
 //    Verifies that the .metadata.ra.decimal / .metadata.dec.decimal values
 //    stored internally are consistent with the string that was formatted.
 
-runner.test('Metadata decimal values consistent with formatted output', () => {
+test('Metadata decimal values consistent with formatted output', () => {
     const input = "05h 35m 17.30s, -05° 23' 28.00\"";
     for (const fmt of OUTPUT_FORMATS) {
         const sanitizer = new CoordinateSanitizer({ outputFormat: fmt });
         const result    = sanitizer.sanitizeCoordinates(input);
-        runner.assert(result.isValid, `Parse failed (${fmt}): ${result.error}`);
+        assert.ok(result.isValid, `Parse failed (${fmt}): ${result.error}`);
 
         const meta    = result.metadata;
         const fromStr = extractCoords(result.coordinates, fmt);
 
-        runner.assertNear(meta.ra.decimal, fromStr.ra_h, TOLERANCE_DEG,
+        assertNear(meta.ra.decimal, fromStr.ra_h, TOLERANCE_DEG,
             `RA metadata vs formatted string (${fmt})`);
-        runner.assertNear(meta.dec.decimal, fromStr.dec_deg, TOLERANCE_DEG,
+        assertNear(meta.dec.decimal, fromStr.dec_deg, TOLERANCE_DEG,
             `DEC metadata vs formatted string (${fmt})`);
     }
-});
-
-// ─── Run ──────────────────────────────────────────────────────────────────────
-
-runner.run().catch(error => {
-    console.error('Integration test runner failed:', error);
-    process.exit(1);
 });
