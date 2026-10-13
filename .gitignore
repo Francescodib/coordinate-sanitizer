@@ -125,3 +125,5 @@ build/Release
 # Test artifacts
 test-results/
 screenshots/
+# Claude Code local settings
+.claude/settings.local.json

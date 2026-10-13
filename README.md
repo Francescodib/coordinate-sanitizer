@@ -25,7 +25,7 @@ npm install coordinate-sanitizer
 - **Multiple Input Formats**: Supports HMS/DMS, decimal, and compact coordinate formats
 - **Flexible Output**: Configurable output formats (Aladin, decimal, HMS/DMS)
 - **Range Validation**: Optional validation of RA (0-24h) and DEC (-90°/+90°) ranges
-- **Security**: Built-in protection against malicious input
+- **Input hardening**: Rejects control characters and markup in input
 - **Object Recognition**: Automatically detects and passes through astronomical object names
 - **Unicode Support**: Handles various Unicode symbols and separators
 - **High Performance**: Optimized for batch processing
@@ -368,12 +368,9 @@ The library is optimized for high-performance applications:
 
 ## Security
 
-The library includes built-in security features:
+The library rejects input containing control characters, HTML tags, or the `javascript:` protocol, and never uses `eval()` or dynamic code execution.
 
-- **Input sanitization** prevents script injection
-- **Malicious content detection** blocks dangerous patterns
-- **Safe parsing** with input validation
-- **No eval() or dynamic code execution**
+This is input hardening, not output encoding: object names are passed through as typed (trimmed), so **always escape the returned string for the context you render it in** (HTML, SQL, shell, etc.).
 
 ## Error Handling
 
@@ -396,7 +393,7 @@ Common error types:
 ## Testing
 
 ```bash
-# Unit tests (67 tests)
+# Unit tests (79 tests)
 npm test
 
 # Integration tests – round-trip, cross-format consistency, known objects (33 tests)
@@ -404,6 +401,10 @@ npm run test:integration
 
 # Full suite
 npm run test:all
+
+# Watch mode and coverage (built-in node:test runner)
+npm run test:watch
+npm run test:coverage
 
 # Lint and type definitions check
 npm run lint
@@ -447,13 +448,24 @@ npm run example
 ## Stats
 
 - **Lines of code**: ~900
-- **Unit tests**: 67
+- **Unit tests**: 79
 - **Integration tests**: 33 (round-trip, cross-format, known objects)
 - **Performance**: 10,000+ coordinates/second
 - **Bundle size**: Minimal (zero dependencies)
 - **Formats supported**: 15+ input variations
 
 ## Changelog
+
+### 2.1.0
+- **Breaking**: minimum Node.js version raised to 20 (18 is end-of-life)
+- **Breaking**: the constructor throws on unknown `outputFormat` / `raDecimalUnit` and on a `precision` that is not an integer between 0 and 20; `options` is frozen
+- **Breaking**: purely numeric input that cannot be parsed (e.g. `1234`, `12h 30m`) now returns an error instead of being passed through as an object name
+- Unsigned decimal pairs (`10, 20`, `180, 45`) are now parsed as coordinates instead of being passed through as object names
+- RA values rounding up to 24h now wrap to `00 00 00.000` / `0.000000` instead of `24 00 00.000` / `360.000000`
+- The "already-valid" shortcut no longer skips range validation or ignores `precision`; already-valid results now include `ra`/`dec` metadata
+- Space-separated input with extra components, trailing text, or a signed RA is rejected instead of silently truncated
+- Object names are returned as typed (trimmed) instead of with normalized quotes/separators; `on...=` text is no longer flagged as malicious
+- Tests migrated to the built-in `node:test` runner (`nodemon` removed)
 
 ### 2.0.0
 - **Breaking**: bare decimal RA input is now interpreted as degrees (the documented astronomical convention), no longer as hours; the `decimal` output format emits RA in degrees. Use the new `raDecimalUnit: 'hours'` option to restore the previous behaviour

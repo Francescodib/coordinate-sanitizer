@@ -19,11 +19,14 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Unit tests
-        run: npm test
+      - name: Lint
+        run: npm run lint
 
-      - name: Integration tests
-        run: npm run test:integration
+      - name: Type check
+        run: npm run typecheck
+
+      - name: Tests
+        run: npm run test:all
 
   publish:
     name: Publish
@@ -41,20 +44,11 @@ jobs:
           registry-url: 'https://registry.npmjs.org'
 
       - name: Upgrade npm (Trusted Publishing requires npm >= 11.5.1)
-        run: npm install -g npm@latest
+        run: npm install -g npm@11
 
       - name: Install dependencies
         run: npm ci
 
-      - name: Debug environment
-        run: |
-          echo "npm: $(npm --version)"
-          echo "node: $(node --version)"
-          echo "OIDC URL available: ${ACTIONS_ID_TOKEN_REQUEST_URL:+yes}"
-
       - name: Publish
-        run: npm publish --access public --loglevel=verbose
+        run: npm publish --access public
 
-      - name: Show npm debug log on failure
-        if: failure()
-        run: cat /home/runner/.npm/_logs/*.log 2>/dev/null | tail -200 || true
