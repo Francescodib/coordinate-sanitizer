@@ -398,6 +398,43 @@ mixedFormats.forEach(coord => {
     console.log();
 });
 
+// Example 14: Decimal comma
+console.log('\n14. Decimal comma (European locales)');
+console.log('-'.repeat(40));
+
+const decimalCommaInputs = [
+    '05 35 16,820 -05 23 15,36',      // decimal commas, space separated
+    '05h35m16,8s, +41d16m09,5s',      // decimal commas, comma separator
+    '83,82, -5,38',                   // decimal degrees with decimal commas
+    '10,20'                           // comma read as separator: RA 10°, DEC 20°
+];
+
+console.log('Testing decimal commas:');
+decimalCommaInputs.forEach(coord => {
+    const result = sanitizer.sanitizeCoordinates(coord);
+    console.log(`  Input: "${coord}"`);
+    console.log(`  Valid: ${result.isValid}`);
+    console.log(`  Output: "${result.coordinates}"`);
+    console.log();
+});
+
+// Example 15: RA and DEC in separate fields
+console.log('\n15. RA and DEC in separate fields');
+console.log('-'.repeat(40));
+
+const raFields = ['05 35 16,820', '05h35m17.3s', '83.82', '5.588h', '25h 00m 00s'];
+const decFields = ['-05 23 15,36', '+41° 16\' 09"', '-5.3911', '95'];
+const show = value => (value === null ? 'null (invalid or out of range)' : value.toFixed(6));
+
+console.log('parseRightAscension (decimal hours):');
+raFields.forEach(ra => {
+    console.log(`  ${ra} -> ${show(sanitizer.parseRightAscension(ra))}`);
+});
+console.log('parseDeclination (decimal degrees):');
+decFields.forEach(dec => {
+    console.log(`  ${dec} -> ${show(sanitizer.parseDeclination(dec))}`);
+});
+
 console.log('\n' + '='.repeat(50));
 console.log('Examples completed!');
 console.log('The coordinate sanitizer is ready for integration into your astronomy applications.');
