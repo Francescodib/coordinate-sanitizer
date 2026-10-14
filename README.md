@@ -517,7 +517,7 @@ npm run example
 
 ## Changelog
 
-### Unreleased
+### 2.3.0
 - Decimal commas: `05 35 16,820 -05 23 15,36` is accepted; a comma stays the RA/DEC separator when the input parses that way
 - New `parseRightAscension()` and `parseDeclination()` for RA and DEC in separate fields
 
