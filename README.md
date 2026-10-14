@@ -75,6 +75,7 @@ console.log(result3.coordinates); // "08 13 49.440, -12 20 42.000"
 - **Space separated**: `12 34 56.7 -45 12 34.5`
 - **Labeled**: `RA 12 34 56.7 DEC -45 12 34.5`, `RA: 12:34:56, DEC: -45:12:34`
 - **Mixed formats**: `12h 34m 56s, +12:34:56`
+- **Decimal comma**: `05 35 16,82 -05 23 15,36`, `05h35m16,8s, +41d16m09,5s` (as written by software on European locales; see [Separators](#separators))
 
 ### Object Names
 - **Messier objects**: `M31`, `M42`
@@ -91,6 +92,8 @@ Supports multiple separators between RA and DEC:
 - Semicolon: `;`
 - Middle dot: `·`
 - Bullet: `•`
+
+A comma is read as a separator first, so `10,20` means RA 10°, DEC 20°. Only when the input does not parse that way is a comma between two digits read as a decimal comma (`05 35 16,820 -05 23 15,36`, `83,82, -5,38`).
 
 ## API Reference
 
@@ -149,6 +152,18 @@ console.log(parsed);
 // { raHours: 5.588139, raDegrees: 83.822083, decDegrees: -5.391111 }
 
 sanitizer.parse('M31'); // null (object name, no numeric coordinates)
+```
+
+#### `parseRightAscension(input)` / `parseDeclination(input)`
+
+Parse a single value when RA and DEC come in separate fields (forms, telescope software). They return decimal hours and decimal degrees, or `null` when the text is invalid or, with `validateRanges`, out of range. A comma between digits is always a decimal comma here.
+
+```javascript
+const sanitizer = new CoordinateSanitizer();
+sanitizer.parseRightAscension('05 35 16,820'); // 5.588006 (hours)
+sanitizer.parseRightAscension('83.82');        // 5.588 (bare decimals follow raDecimalUnit)
+sanitizer.parseDeclination('-05 23 15,36');    // -5.3876 (degrees)
+sanitizer.parseDeclination('95');              // null (out of range)
 ```
 
 #### `isValidFormat(input)`
@@ -439,7 +454,7 @@ Invalid constructor options throw instead of returning an error result.
 ## Testing
 
 ```bash
-# Unit tests (89 tests)
+# Unit tests (92 tests)
 npm test
 
 # Integration tests – round-trip, cross-format consistency, known objects (33 tests)
@@ -493,14 +508,18 @@ npm run example
 
 ## Stats
 
-- **Lines of code**: ~780
-- **Unit tests**: 89
+- **Lines of code**: ~940
+- **Unit tests**: 92
 - **Integration tests**: 33 (round-trip, cross-format, known objects)
 - **Performance**: 10,000+ coordinates/second
 - **Bundle size**: Minimal (zero dependencies)
 - **Formats supported**: 15+ input variations
 
 ## Changelog
+
+### 2.3.0
+- Decimal commas: `05 35 16,820 -05 23 15,36` is accepted; a comma stays the RA/DEC separator when the input parses that way
+- New `parseRightAscension()` and `parseDeclination()` for RA and DEC in separate fields
 
 ### 2.2.0
 - Inputs without seconds (`12 30, +45 30`), decimal RA with an explicit unit suffix (`12.5h`, `187.5d`)

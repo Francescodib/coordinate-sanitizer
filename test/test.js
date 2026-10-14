@@ -862,3 +862,45 @@ test('Should expose a global when loaded as a plain browser script', () => {
     );
     assert.strictEqual(result, '00 40 00.000, +20 00 00.000');
 });
+
+test('Should read decimal commas when the input does not parse otherwise', () => {
+    const sanitizer = new CoordinateSanitizer();
+    for (const [input, expected] of [
+        ['05 35 16,820 -05 23 15,36', '05 35 16.820, -05 23 15.360'],
+        ['05 35 16,820, -05 23 15,36', '05 35 16.820, -05 23 15.360'],
+        ['05h35m16,8s +41d16m09,5s', '05 35 16.800, +41 16 09.500'],
+        ['12 30,5, +45 30,5', '12 30 30.000, +45 30 30.000'],
+        ['83,82, -5,38', '05 35 16.800, -05 22 48.000'],
+    ]) {
+        const result = sanitizer.sanitizeCoordinates(input);
+        assert.ok(result.isValid, `${input}: ${result.error}`);
+        assert.strictEqual(result.coordinates, expected, input);
+    }
+});
+
+test('Should keep a comma between plain numbers as the RA/DEC separator', () => {
+    const sanitizer = new CoordinateSanitizer({ outputFormat: 'decimal' });
+    assert.strictEqual(sanitizer.sanitizeCoordinates('10,20').coordinates, '10.000000, 20.000000');
+    assert.strictEqual(sanitizer.sanitizeCoordinates('10, 20').coordinates, '10.000000, 20.000000');
+});
+
+test('Should parse a single right ascension or declination', () => {
+    const sanitizer = new CoordinateSanitizer();
+    const close = (actual, expected, label) =>
+        assert.ok(Math.abs(actual - expected) < 1e-9, `${label}: ${actual} != ${expected}`);
+    close(sanitizer.parseRightAscension('05 35 16.82'), 5 + 35 / 60 + 16.82 / 3600, 'sexagesimal');
+    close(sanitizer.parseRightAscension('05 35 16,82'), 5 + 35 / 60 + 16.82 / 3600, 'decimal comma');
+    close(sanitizer.parseRightAscension('05h35m16.82s'), 5 + 35 / 60 + 16.82 / 3600, 'units');
+    close(sanitizer.parseRightAscension('83.82'), 5.588, 'decimal degrees');
+    close(sanitizer.parseRightAscension('5,588h'), 5.588, 'decimal hours');
+    close(sanitizer.parseDeclination('-05 23 15,36'), -5.3876, 'decimal comma');
+    close(sanitizer.parseDeclination('+41:16:09'), 41 + 16 / 60 + 9 / 3600, 'colons');
+    close(sanitizer.parseDeclination('-00 30 00'), -0.5, 'negative zero degrees');
+    assert.strictEqual(sanitizer.parseRightAscension('25 00 00'), null, 'RA out of range');
+    assert.strictEqual(sanitizer.parseDeclination('95'), null, 'DEC out of range');
+    assert.strictEqual(new CoordinateSanitizer({ validateRanges: false }).parseDeclination('95'), 95);
+    assert.strictEqual(sanitizer.parseDeclination('1, 2'), null, 'two values');
+    assert.strictEqual(sanitizer.parseRightAscension(''), null, 'empty');
+    assert.strictEqual(sanitizer.parseRightAscension('<b>05</b>'), null, 'markup');
+    assert.strictEqual(sanitizer.parseRightAscension(null), null, 'not a string');
+});
