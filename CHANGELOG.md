@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- Decimal commas, as written by software running on European locales: `05 35 16,820 -05 23 15,36`, `05h35m16,8s, +41d16m09,5s`, `83,82, -5,38`. A comma is still read as the RA/DEC separator first (`10,20` stays RA 10°, DEC 20°); the decimal reading is tried only when the input does not parse otherwise, so no input valid in 2.2.0 changes meaning.
+- `parseRightAscension(input)` and `parseDeclination(input)`: parse a single RA or DEC value (decimal hours / decimal degrees, or `null`), for coordinates that come in separate fields. A comma between digits is always a decimal comma here; ranges are checked when `validateRanges` is on.
+
 ## [2.2.0] - 2026-10-13
 
 ### Added

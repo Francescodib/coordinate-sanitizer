@@ -29,6 +29,26 @@ declare class CoordinateSanitizer {
   parse(input: string): CoordinateSanitizer.ParsedCoordinates | null;
 
   /**
+   * Parse a single right ascension value ("05 35 17.3", "05h35m17s",
+   * "83.82", "5.588h"). A comma between digits is read as a decimal point
+   * ("05 35 16,820"). Bare decimals use `raDecimalUnit`.
+   * @param input RA text, without the declination
+   * @returns RA in decimal hours, or null if invalid (or out of range when
+   *   `validateRanges` is on)
+   */
+  parseRightAscension(input: string): number | null;
+
+  /**
+   * Parse a single declination value ("-05 23 28", "+41°16'09\"",
+   * "-5.3911"). A comma between digits is read as a decimal point
+   * ("-05 23 15,36").
+   * @param input DEC text, without the right ascension
+   * @returns DEC in decimal degrees, or null if invalid (or out of range when
+   *   `validateRanges` is on)
+   */
+  parseDeclination(input: string): number | null;
+
+  /**
    * Check if input looks like coordinates
    * @param input Input string to check
    * @returns True if input appears to be coordinates

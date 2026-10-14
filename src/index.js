@@ -114,7 +114,17 @@ class CoordinateSanitizer {
       return passthrough();
     }
 
-    const result = this.parseCoordinates(cleanInput);
+    let result = this.parseCoordinates(cleanInput);
+
+    // Decimal comma ("05 35 16,820 -05 23 15,36", as written by software
+    // running on European locales). A comma is an RA/DEC separator first:
+    // the decimal reading is tried only when the input does not parse as is,
+    // so "10,20" keeps meaning RA 10, DEC 20.
+    if (!result?.isValid && /\d,\d/.test(input)) {
+      const decimalComma = this.parseCoordinates(this.cleanInput(this.toDecimalPoint(input)));
+      if (decimalComma?.isValid) result = decimalComma;
+    }
+
     if (result === null) {
       return passthrough();
     }
@@ -210,6 +220,60 @@ class CoordinateSanitizer {
       raDegrees: metadata.ra.decimal * 15,
       decDegrees: metadata.dec.decimal,
     };
+  }
+
+  /**
+   * Parse a single right ascension value ("05 35 17.3", "05h35m17s",
+   * "83.82", "5.588h"). A comma between digits is read as a decimal point.
+   * @param {string} input - RA text, without the declination
+   * @returns {number|null} RA in decimal hours, or null if invalid
+   */
+  parseRightAscension(input) {
+    const clean = this.cleanComponent(input);
+    if (clean === null) return null;
+    const ra = this.parseRA(clean);
+    if (!ra.isValid) return null;
+    if (this.options.validateRanges && this.validateRA(ra.decimal)) return null;
+    return ra.decimal;
+  }
+
+  /**
+   * Parse a single declination value ("-05 23 28", "+41°16'09\"",
+   * "-5.3911"). A comma between digits is read as a decimal point.
+   * @param {string} input - DEC text, without the right ascension
+   * @returns {number|null} DEC in decimal degrees, or null if invalid
+   */
+  parseDeclination(input) {
+    const clean = this.cleanComponent(input);
+    if (clean === null) return null;
+    const dec = this.parseDEC(clean);
+    if (!dec.isValid) return null;
+    if (this.options.validateRanges && this.validateDEC(dec.decimal)) return null;
+    return dec.decimal;
+  }
+
+  /**
+   * Validate and normalize the text of a single RA or DEC value. Without a
+   * second coordinate a comma between digits can only be a decimal comma.
+   * @private
+   * @returns {string|null} Cleaned text, or null if unusable
+   */
+  cleanComponent(input) {
+    if (!input || typeof input !== "string" || this.containsMaliciousContent(input)) {
+      return null;
+    }
+    const clean = this.cleanInput(this.toDecimalPoint(input));
+    return clean.includes(",") ? null : clean;
+  }
+
+  /**
+   * Turn tight decimal commas ("16,820") into decimal points; a comma with
+   * spaces around it ("83, 82") stays a separator. Works on raw input:
+   * cleanInput removes the spaces that tell the two apart.
+   * @private
+   */
+  toDecimalPoint(input) {
+    return input.replace(/(\d),(?=\d)/g, "$1.");
   }
 
   /**
@@ -828,6 +892,7 @@ class CoordinateSanitizer {
         "Without seconds (12 30, +45 30)",
         "Compact (123456.78, -123456.78)",
         "Mixed separators (12:34:56.78, +12°34'56.78\")",
+        "Decimal comma (05 35 16,82 -05 23 15,36)",
         "Labeled (RA 12 34 56.78 DEC +12 34 56.78)",
         "IAU J2000 designations (J053517.3-052328), with parseDesignations",
         "Object names (M31, NGC 1234, etc.)",

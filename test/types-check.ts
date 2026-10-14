@@ -39,6 +39,10 @@ if (parsed) {
 const isCoords: boolean = sanitizer.looksLikeCoordinates("M31");
 const isValid: boolean = sanitizer.isValidFormat("12 34 56.000, +12 34 56.000");
 
+// Single components return numbers or null
+const ra: number | null = sanitizer.parseRightAscension("05 35 16,82");
+const dec: number | null = sanitizer.parseDeclination("-05 23 15,36");
+
 // Static methods
 const preset: CoordinateSanitizer = CoordinateSanitizer.createPreset("strict");
 const formats: CoordinateSanitizer.SupportedFormats =
@@ -49,5 +53,7 @@ void isCoords;
 void isValid;
 void preset;
 void formats;
+void ra;
+void dec;
 
 export {};
