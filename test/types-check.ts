@@ -14,6 +14,9 @@ const sanitizer = new CoordinateSanitizer({
   strictMode: false,
   raDecimalUnit: "degrees",
   parseDesignations: false,
+  secondsPrecision: 2,
+  allowObjectNames: true,
+  maxLength: 512,
 });
 
 // Options are readable and fully resolved
@@ -22,10 +25,12 @@ const format: "aladin" | "decimal" | "hms-dms" = sanitizer.options.outputFormat;
 // sanitizeCoordinates result shape
 const result: CoordinateSanitizer.SanitizationResult =
   sanitizer.sanitizeCoordinates("12h 34m 56s, +12° 34' 56\"");
-if (result.isValid && result.metadata && result.metadata.ra) {
+if (result.isValid && result.metadata.ra) {
   const hours: number | undefined = result.metadata.ra.hours;
   void hours;
 }
+const error: string | null = result.error;
+void error;
 
 // parse() returns numeric values or null
 const parsed: CoordinateSanitizer.ParsedCoordinates | null =

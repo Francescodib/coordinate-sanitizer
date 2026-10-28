@@ -5,6 +5,26 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- `secondsPrecision` option (0-6, default 3): decimals of the seconds in the `aladin` and `hms-dms` formats. Seconds derived from decimal input are now kept to the microsecond (previously the millisecond) in `metadata`.
+- `allowObjectNames` option (default `true`): when `false`, input that is not a coordinate is returned as an error instead of being passed through.
+- `maxLength` option (default 256): longer input is rejected before parsing.
+- Command-line interface: `npx coordinate-sanitizer "05 35 17.3 -05 23 28"`, or one input per line on standard input.
+- A clearer error for RA written in sexagesimal degrees (`12d 34m 56s`).
+- Two decimal values separated only by whitespace or a tab: `83.82 -5.39`, `83.82<TAB>-5.39`, `83,82 -5,39`. Accepted when the reading is unambiguous (signed DEC, decimal point in the RA, or a unit suffix); two bare integers such as `10 20` return an "Ambiguous coordinates" error suggesting `10, 20`. Not accepted in strict mode.
+
+### Changed (breaking)
+- Input longer than 256 characters is rejected (set `maxLength` to raise or disable the limit).
+- The security filter is stricter: any `<` or `>` is rejected (an unclosed tag such as `<img src=x onerror=...` used to pass), as are `javascript :` with spaces, `vbscript:` and `data:` schemes, C1 control characters and invisible format characters (bidi overrides, zero-width spaces). A leading byte order mark is still accepted.
+- `validateRanges` and `strictMode` must be booleans; other values throw a `TypeError` (previously any truthy value was accepted).
+- TypeScript: `SanitizationResult.error` and `metadata` are no longer optional, matching what the library always returns.
+
+### Fixed
+- Tab, line feed and carriage return were rejected as "malicious content", so values pasted from a spreadsheet or read line by line from a file (`83.82<TAB>-5.39`, a trailing CR LF) failed. They are now treated as whitespace.
+- Input normalization took quadratic time on long runs of spaces (80,000 spaces took about 5 seconds), a denial-of-service risk for servers parsing untrusted input.
+
 ## [2.3.0] - 2026-10-14
 
 ### Added

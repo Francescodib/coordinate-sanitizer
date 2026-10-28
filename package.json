@@ -5,6 +5,9 @@
   "main": "src/index.js",
   "module": "src/index.mjs",
   "types": "src/index.d.ts",
+  "bin": {
+    "coordinate-sanitizer": "src/cli.js"
+  },
   "exports": {
     ".": {
       "types": "./src/index.d.ts",

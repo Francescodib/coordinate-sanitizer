@@ -904,3 +904,183 @@ test('Should parse a single right ascension or declination', () => {
     assert.strictEqual(sanitizer.parseRightAscension('<b>05</b>'), null, 'markup');
     assert.strictEqual(sanitizer.parseRightAscension(null), null, 'not a string');
 });
+
+// Hardening (security filter, input length, linear-time normalization)
+test('Should reject markup, URL schemes and invisible characters', () => {
+    const sanitizer = new CoordinateSanitizer();
+    for (const input of [
+        '<img src=x onerror=alert(1)//',
+        'a > b',
+        'javascript : alert(1)',
+        'vbscript:msgbox(1)',
+        'data:text/html,abc',
+        'x\u0085y',
+        '\u202Eabc',
+        'M\u200B31',
+    ]) {
+        const result = sanitizer.sanitizeCoordinates(input);
+        assert.ok(!result.isValid, JSON.stringify(input));
+        assertContains(result.error, 'malicious');
+    }
+    assert.strictEqual(sanitizer.parseDeclination('-05 23 28\u200B'), null);
+});
+
+test('Should treat tab, line feed and carriage return as whitespace', () => {
+    const sanitizer = new CoordinateSanitizer();
+    assert.strictEqual(
+        sanitizer.sanitizeCoordinates('\t05 35 17.3,\t-05 23 28\r\n').coordinates,
+        '05 35 17.300, -05 23 28.000'
+    );
+    assert.strictEqual(
+        sanitizer.sanitizeCoordinates('05\t35\t17.3\t-05\t23\t28').coordinates,
+        '05 35 17.300, -05 23 28.000'
+    );
+    assert.strictEqual(sanitizer.sanitizeCoordinates('M31\r\n').coordinates, 'M31');
+    assert.strictEqual(sanitizer.parseDeclination('-05 23 28\n'), -(5 + 23 / 60 + 28 / 3600));
+});
+
+test('Should parse a decimal pair separated only by whitespace', () => {
+    const sanitizer = new CoordinateSanitizer();
+    const expected = '05 35 16.800, -05 23 24.000';
+    for (const input of ['83.82 -5.39', '83.82\t-5.39', '83.82   -5.39', '83,82 -5,39', '83,82\t-5,39',
+        '5.588h -5.39', '83.82d -5.39d', '83.82\t-5.39\r\n']) {
+        assert.strictEqual(sanitizer.sanitizeCoordinates(input).coordinates, expected, JSON.stringify(input));
+    }
+    assert.strictEqual(sanitizer.sanitizeCoordinates('83.82 5.39').coordinates, '05 35 16.800, +05 23 24.000');
+    assert.strictEqual(sanitizer.sanitizeCoordinates('83 -5').coordinates, '05 32 00.000, -05 00 00.000');
+    assert.strictEqual(
+        new CoordinateSanitizer({ raDecimalUnit: 'hours' }).sanitizeCoordinates('5.588 -5.39').coordinates,
+        expected
+    );
+    assertContains(sanitizer.sanitizeCoordinates('83.82 -95').error, 'DEC out of range');
+});
+
+test('Should reject two bare integers as ambiguous', () => {
+    const sanitizer = new CoordinateSanitizer();
+    for (const input of ['10 20', '12 30.5']) {
+        const result = sanitizer.sanitizeCoordinates(input);
+        assert.ok(!result.isValid, input);
+        assertContains(result.error, 'Ambiguous');
+    }
+    // Explicit separator or sign removes the ambiguity
+    assert.ok(sanitizer.sanitizeCoordinates('10, 20').isValid);
+    assert.ok(sanitizer.sanitizeCoordinates('10 +20').isValid);
+});
+
+test('Strict mode should still require a separator for decimal pairs', () => {
+    const strict = new CoordinateSanitizer({ strictMode: true });
+    assertContains(strict.sanitizeCoordinates('83.82 -5.39').error, 'Strict mode');
+    assert.ok(strict.sanitizeCoordinates('83.82\t,\t-5.39').isValid);
+});
+
+test('Should accept a leading byte order mark', () => {
+    const sanitizer = new CoordinateSanitizer();
+    assert.strictEqual(sanitizer.sanitizeCoordinates('\uFEFFM31').coordinates, 'M31');
+    assert.strictEqual(
+        sanitizer.sanitizeCoordinates('\uFEFF05 35 17.3 -05 23 28').coordinates,
+        '05 35 17.300, -05 23 28.000'
+    );
+});
+
+test('Should reject input longer than maxLength', () => {
+    const sanitizer = new CoordinateSanitizer();
+    const long = 'M31' + ' '.repeat(300);
+    assertContains(sanitizer.sanitizeCoordinates(long).error, 'maximum length');
+    assert.strictEqual(sanitizer.parseRightAscension('1' + ' '.repeat(300)), null);
+    const short = new CoordinateSanitizer({ maxLength: 10 });
+    assert.ok(!short.sanitizeCoordinates('12 34 56, +12 34 56').isValid);
+    const unlimited = new CoordinateSanitizer({ maxLength: Infinity });
+    assert.strictEqual(unlimited.sanitizeCoordinates(long).coordinates, 'M31');
+});
+
+test('Normalization should run in linear time on long whitespace runs', () => {
+    const sanitizer = new CoordinateSanitizer({ maxLength: Infinity });
+    // Each took several seconds with the former quadratic regexes
+    const inputs = [
+        'RA' + ' '.repeat(100000) + 'x',
+        '1' + ' '.repeat(100000) + 'x',
+        '12' + ' :'.repeat(50000),
+        '1' + ' ,'.repeat(50000),
+        '<'.repeat(100000),
+    ];
+    const start = Date.now();
+    for (const input of inputs) {
+        sanitizer.sanitizeCoordinates(input);
+        sanitizer.parseRightAscension(input);
+    }
+    const elapsed = Date.now() - start;
+    assert.ok(elapsed < 500, `took ${elapsed} ms`);
+});
+
+test('Should reject non-boolean flags and invalid limits', () => {
+    for (const name of ['validateRanges', 'strictMode', 'parseDesignations', 'allowObjectNames']) {
+        assert.throws(() => new CoordinateSanitizer({ [name]: 'no' }), TypeError, name);
+    }
+    assert.throws(() => new CoordinateSanitizer({ secondsPrecision: 7 }), RangeError);
+    assert.throws(() => new CoordinateSanitizer({ secondsPrecision: -1 }), RangeError);
+    assert.throws(() => new CoordinateSanitizer({ maxLength: 0 }), RangeError);
+    assert.throws(() => new CoordinateSanitizer({ maxLength: 1.5 }), RangeError);
+});
+
+// Output and parsing options
+test('Should honour secondsPrecision in sexagesimal output', () => {
+    const input = '05 35 17.29992, -05 23 27.9996';
+    const none = new CoordinateSanitizer({ secondsPrecision: 0 });
+    assert.strictEqual(none.sanitizeCoordinates(input).coordinates, '05 35 17, -05 23 28');
+    assert.strictEqual(
+        none.sanitizeCoordinates('05 35 59.6, -05 23 59.6').coordinates,
+        '05 36 00, -05 24 00',
+        'carry into minutes'
+    );
+    const five = new CoordinateSanitizer({ secondsPrecision: 5 });
+    assert.strictEqual(five.sanitizeCoordinates(input).coordinates, '05 35 17.29992, -05 23 27.99960');
+    assert.ok(five.isValidFormat('05 35 17.29992, -05 23 27.99960'));
+    const hmsDms = new CoordinateSanitizer({ outputFormat: 'hms-dms', secondsPrecision: 1 });
+    assert.strictEqual(
+        hmsDms.sanitizeCoordinates(input).coordinates,
+        '05h 35m 17.3s, -05° 23\' 28.0"'
+    );
+    // Decimal input keeps sub-millisecond seconds
+    const fromDecimal = five.sanitizeCoordinates('83.822083, -5.391111');
+    assert.strictEqual(fromDecimal.coordinates, '05 35 17.29992, -05 23 27.99960');
+});
+
+test('Should reject object names when allowObjectNames is false', () => {
+    const sanitizer = new CoordinateSanitizer({ allowObjectNames: false });
+    const result = sanitizer.sanitizeCoordinates('M31');
+    assert.ok(!result.isValid);
+    assertContains(result.error, 'object names are disabled');
+    assert.ok(sanitizer.sanitizeCoordinates('00 42 44.3, +41 16 09').isValid);
+});
+
+test('Should explain that sexagesimal RA is in hours', () => {
+    const result = new CoordinateSanitizer().sanitizeCoordinates('12d 34m 56s, +12d 34m 56s');
+    assert.ok(!result.isValid);
+    assertContains(result.error, 'sexagesimal RA is in hours');
+});
+
+// Command-line interface
+test('CLI should sanitize arguments and standard input', () => {
+    const { spawnSync } = require('node:child_process');
+    const path = require('node:path');
+    const cli = path.join(__dirname, '..', 'src', 'cli.js');
+    const run = (args, input) => spawnSync(process.execPath, [cli, ...args], { input, encoding: 'utf8' });
+
+    let out = run(['05 35 17.3 -05 23 28', 'M31']);
+    assert.strictEqual(out.status, 0);
+    assert.strictEqual(out.stdout, '05 35 17.300, -05 23 28.000\nM31\n');
+
+    out = run(['--format', 'decimal', '--no-names'], '83.82, -5.39\n\nNGC 1976\n');
+    assert.strictEqual(out.status, 1);
+    assert.strictEqual(out.stdout, '83.820000, -5.390000\n');
+    assertContains(out.stderr, 'NGC 1976: Input is not a coordinate');
+
+    out = run(['--json', '12h 30m, +45 30']);
+    const parsed = JSON.parse(out.stdout);
+    assert.strictEqual(parsed.input, '12h 30m, +45 30');
+    assert.strictEqual(parsed.coordinates, '12 30 00.000, +45 30 00.000');
+
+    assert.strictEqual(run(['--format', 'bogus', 'x']).status, 2);
+    assert.strictEqual(run(['--unknown']).status, 2);
+    assertContains(run(['--help']).stdout, 'Usage:');
+});

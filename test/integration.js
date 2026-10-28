@@ -330,3 +330,39 @@ test('Metadata decimal values consistent with formatted output', () => {
             `DEC metadata vs formatted string (${fmt})`);
     }
 });
+
+// 6. Randomized round-trips over the whole sky (seeded, reproducible)
+test('Randomized positions survive every output format round-trip', () => {
+    // mulberry32: small deterministic PRNG
+    let seed = 0x5eed;
+    const random = () => {
+        seed = (seed + 0x6d2b79f5) | 0;
+        let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+        t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+        return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+    const reference = new CoordinateSanitizer({ outputFormat: 'decimal', precision: 8 });
+    const sanitizers = ['aladin', 'decimal', 'hms-dms'].map(
+        (outputFormat) => new CoordinateSanitizer({ outputFormat })
+    );
+
+    for (let i = 0; i < 2000; i++) {
+        const input = `${(random() * 360).toFixed(8)}, ${(random() * 180 - 90).toFixed(8)}`;
+        const expected = reference.parse(input);
+        assert.ok(expected, input);
+
+        for (const sanitizer of sanitizers) {
+            const first = sanitizer.sanitizeCoordinates(input);
+            assert.ok(first.isValid, `${sanitizer.options.outputFormat}: ${input}`);
+            const second = sanitizer.sanitizeCoordinates(first.coordinates);
+            assert.strictEqual(second.coordinates, first.coordinates, `idempotent: ${input}`);
+
+            // Worst rounding: 0.0005 s of RA = 2.1e-6°; RA wraps at 360°
+            const back = sanitizer.parse(first.coordinates);
+            const raDiff = Math.abs(back.raDegrees - expected.raDegrees);
+            assert.ok(Math.min(raDiff, 360 - raDiff) < 1e-5, `RA ${input} -> ${first.coordinates}`);
+            assert.ok(Math.abs(back.decDegrees - expected.decDegrees) < 1e-5,
+                `DEC ${input} -> ${first.coordinates}`);
+        }
+    }
+});
