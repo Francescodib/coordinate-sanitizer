@@ -9,8 +9,10 @@ declare class CoordinateSanitizer {
   /**
    * Create a new CoordinateSanitizer instance
    * @param options Configuration options
-   * @throws {TypeError} If outputFormat or raDecimalUnit is unknown
-   * @throws {RangeError} If precision is not an integer between 0 and 20
+   * @throws {TypeError} If outputFormat or raDecimalUnit is unknown, or a
+   *   boolean option is not a boolean
+   * @throws {RangeError} If precision, secondsPrecision or maxLength is out
+   *   of range
    */
   constructor(options?: CoordinateSanitizer.CoordinateSanitizerOptions);
 
@@ -84,8 +86,13 @@ declare namespace CoordinateSanitizer {
   interface CoordinateSanitizerOptions {
     /** Output format for coordinates */
     outputFormat?: "aladin" | "decimal" | "hms-dms";
-    /** Decimal precision for output (integer, 0-20) */
+    /** Decimals of the `decimal` output format (integer, 0-20, default 6) */
     precision?: number;
+    /**
+     * Decimals of the seconds in the `aladin` and `hms-dms` output formats
+     * (integer, 0-6, default 3)
+     */
+    secondsPrecision?: number;
     /** Enable range validation */
     validateRanges?: boolean;
     /**
@@ -106,6 +113,16 @@ declare namespace CoordinateSanitizer {
      * is only as accurate as the last digit. Defaults to false.
      */
     parseDesignations?: boolean;
+    /**
+     * Pass input that is not a coordinate through as an object name
+     * (default true). When false, such input is returned as an error.
+     */
+    allowObjectNames?: boolean;
+    /**
+     * Longer input is rejected before any parsing (positive integer or
+     * Infinity, default 256)
+     */
+    maxLength?: number;
   }
 
   interface CoordinateComponent {
@@ -132,10 +149,13 @@ declare namespace CoordinateSanitizer {
     isValid: boolean;
     /** Sanitized coordinate string */
     coordinates: string;
-    /** Error message if processing failed */
-    error?: string | null;
+    /**
+     * Error message if processing failed, null otherwise. It may quote the
+     * input: escape it before rendering.
+     */
+    error: string | null;
     /** Additional metadata about the processing (empty object on error) */
-    metadata?: {
+    metadata: {
       /** Type of input detected */
       inputFormat?: "coordinates" | "object-name" | "already-valid";
       /** Output format used */

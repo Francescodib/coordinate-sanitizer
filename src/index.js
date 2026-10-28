@@ -8,16 +8,30 @@
  * @license MIT
  */
 
+// Checked on the raw input, before any transformation
+const DANGEROUS_PATTERNS = [
+  /[<>]/, // HTML markup, including unclosed tags ("<img src=x onerror=...")
+  /\b(?:javascript|vbscript|data)\s*:/i, // script-capable URL schemes
+  // C0 and C1 control characters, except tab, line feed and carriage return
+  // (pasted spreadsheet cells, lines read from files): those are whitespace
+  // eslint-disable-next-line no-control-regex -- intentionally matches control characters
+  /[\x00-\x08\x0B\x0C\x0E-\x1F\x7F-\x9F]/,
+  /\p{Cf}/u, // invisible format characters: bidi overrides, zero-width spaces
+];
+
 class CoordinateSanitizer {
   constructor(options = {}) {
     // Configuration options
     this.options = {
       outputFormat: "aladin", // 'aladin' | 'decimal' | 'hms-dms'
       precision: 6,
+      secondsPrecision: 3, // decimals of the seconds in sexagesimal output
       validateRanges: true,
       strictMode: false,
       raDecimalUnit: "degrees", // 'degrees' | 'hours' — unit of a bare decimal RA input
       parseDesignations: false, // parse IAU-style J2000 designations (J053517.3-052328)
+      allowObjectNames: true, // pass non-coordinate input through as an object name
+      maxLength: 256, // longer input is rejected before any parsing
       ...options,
     };
     this.validateOptions(this.options);
@@ -87,6 +101,14 @@ class CoordinateSanitizer {
       return this.createResult(false, "", "Input must be a non-empty string");
     }
 
+    if (input.length > this.options.maxLength) {
+      return this.createResult(
+        false,
+        "",
+        `Input exceeds the maximum length of ${this.options.maxLength} characters`
+      );
+    }
+
     // Security check on raw input before any transformation
     if (this.containsMaliciousContent(input)) {
       return this.createResult(
@@ -104,11 +126,19 @@ class CoordinateSanitizer {
     const cleanInput = this.cleanInput(input);
 
     // Object names are returned as typed, only trimmed and whitespace-collapsed
-    const passthrough = () =>
-      this.createResult(true, input.trim().replace(/\s+/g, " "), null, {
+    const passthrough = () => {
+      if (!this.options.allowObjectNames) {
+        return this.createResult(
+          false,
+          "",
+          "Input is not a coordinate (object names are disabled)"
+        );
+      }
+      return this.createResult(true, input.trim().replace(/\s+/g, " "), null, {
         inputFormat: "object-name",
         outputFormat: "passthrough",
       });
+    };
 
     if (!this.looksLikeCoordinates(cleanInput)) {
       return passthrough();
@@ -170,6 +200,11 @@ class CoordinateSanitizer {
         "",
         "Strict mode: use an explicit separator (comma or semicolon) between RA and DEC"
       );
+    }
+
+    const pair = this.parseDecimalPair(cleanInput);
+    if (pair) {
+      return pair;
     }
 
     const spaceMatch = this.parseSpaceSeparatedCoordinates(cleanInput);
@@ -259,7 +294,12 @@ class CoordinateSanitizer {
    * @returns {string|null} Cleaned text, or null if unusable
    */
   cleanComponent(input) {
-    if (!input || typeof input !== "string" || this.containsMaliciousContent(input)) {
+    if (
+      !input ||
+      typeof input !== "string" ||
+      input.length > this.options.maxLength ||
+      this.containsMaliciousContent(input)
+    ) {
       return null;
     }
     const clean = this.cleanInput(this.toDecimalPoint(input));
@@ -277,7 +317,9 @@ class CoordinateSanitizer {
   }
 
   /**
-   * Clean and normalize input string
+   * Clean and normalize input string. Whitespace is collapsed first so that
+   * the separator rules below match single spaces: "\s*,\s*" takes
+   * quadratic time on long runs of spaces.
    * @private
    */
   cleanInput(input) {
@@ -288,32 +330,28 @@ class CoordinateSanitizer {
       .replace(/[′']/g, "'")
       .replace(/[″"]/g, '"')
       .replace(/[\u2013\u2014\u2212]/g, "-")
-      .replace(/([+-])\s+(?=\d)/g, "$1")
-      .replace(/[·•]/g, ",")
-      .replace(/\s*[,;]\s*/g, ",")
-      .replace(/\s*:\s*/g, ":")
       .replace(/\s+/g, " ")
+      .replace(/([+-]) (?=\d)/g, "$1")
+      .replace(/[·•]/g, ",")
+      .replace(/ ?[,;] ?/g, ",")
+      .replace(/ ?: ?/g, ":")
       .trim();
   }
 
   /**
-   * Check for potentially malicious content
+   * Check for potentially malicious content. A leading byte order mark, as
+   * left by text read from a file, is allowed.
    * @private
    */
   containsMaliciousContent(input) {
-    const dangerousPatterns = [
-      /<[^>]*>/, // HTML tags
-      /javascript:/i, // JavaScript protocol
-      // eslint-disable-next-line no-control-regex -- intentionally matches control characters
-      /[\x00-\x1F\x7F]/,
-    ];
-
-    return dangerousPatterns.some((pattern) => pattern.test(input));
+    const text = input.replace(/^\uFEFF/, "");
+    return DANGEROUS_PATTERNS.some((pattern) => pattern.test(text));
   }
 
   /**
-   * Check if input looks like coordinates
-   * @private
+   * Check if input looks like coordinates (rather than an object name)
+   * @param {string} input - Raw or cleaned input
+   * @returns {boolean}
    */
   looksLikeCoordinates(input) {
     if (!input) return false;
@@ -392,6 +430,33 @@ class CoordinateSanitizer {
     }
 
     return this.finalizeCoordinates(raResult, decResult);
+  }
+
+  /**
+   * Parse two decimal values separated only by whitespace ("83.82 -5.39",
+   * tab-separated columns). Two bare integers ("10 20") also read as hours
+   * and minutes of an RA, so the pair is accepted only when that reading is
+   * impossible: a signed DEC, a decimal point in the RA, or a unit suffix.
+   * @private
+   * @returns {Object|null} Result object, or null if not a decimal pair
+   */
+  parseDecimalPair(input) {
+    const parts = input.split(" ");
+    if (parts.length !== 2) return null;
+    const [ra, dec] = parts;
+    if (!this.patterns.raDecimal.test(ra) || !this.patterns.decDecimal.test(dec)) {
+      return null;
+    }
+
+    const unambiguous = /^[+-]/.test(dec) || /[.dh°]/i.test(ra) || /[d°]$/i.test(dec);
+    if (!unambiguous) {
+      return this.createResult(
+        false,
+        "",
+        `Ambiguous coordinates: ${input} (separate RA and DEC with a comma, or sign the declination: "${ra}, ${dec}" or "${ra} +${dec}")`
+      );
+    }
+    return this.parseCombinedCoordinates(ra, dec);
   }
 
   /**
@@ -572,6 +637,14 @@ class CoordinateSanitizer {
       };
     }
 
+    // "12d 34m 56s": RA written as sexagesimal degrees
+    if (/\dd/i.test(raPart)) {
+      return {
+        isValid: false,
+        error: `Invalid RA format: ${raPart} (sexagesimal RA is in hours, e.g. 12h 34m 56s; degrees only as a decimal, e.g. 188.73d)`,
+      };
+    }
+
     return { isValid: false, error: `Invalid RA format: ${raPart}` };
   }
 
@@ -641,14 +714,16 @@ class CoordinateSanitizer {
   }
 
   /**
-   * Round seconds to 3 decimals and carry overflow into minutes and the
-   * leading unit. A carry that reaches wrapAt wraps to 0 (24h == 0h).
+   * Round seconds to secondsPrecision decimals and carry overflow into
+   * minutes and the leading unit. A carry that reaches wrapAt wraps to 0
+   * (24h == 0h).
    * @private
    */
   normalizeSexagesimal(lead, minutes, seconds, wrapAt = null) {
+    const scale = 10 ** this.options.secondsPrecision;
     let l = lead;
     let m = minutes;
-    let s = Math.round(seconds * 1000) / 1000;
+    let s = Math.round(seconds * scale) / scale;
     if (s >= 60) {
       s = 0;
       m += 1;
@@ -667,8 +742,11 @@ class CoordinateSanitizer {
    * @private
    */
   formatSexagesimal(raResult, decResult, raUnits, decUnits) {
+    const { secondsPrecision } = this.options;
     const pad = (n) => n.toString().padStart(2, "0");
-    const sec = (n) => n.toFixed(3).padStart(6, "0");
+    // Two integer digits, plus the decimal point and decimals if any
+    const sec = (n) =>
+      n.toFixed(secondsPrecision).padStart(secondsPrecision ? secondsPrecision + 3 : 2, "0");
 
     const [raH, raM, raS] = this.normalizeSexagesimal(
       raResult.hours,
@@ -735,7 +813,8 @@ class CoordinateSanitizer {
     let hours = Math.floor(decimal);
     const minutesDecimal = (decimal - hours) * 60;
     let minutes = Math.floor(minutesDecimal);
-    let seconds = Math.round((minutesDecimal - minutes) * 60 * 1000) / 1000;
+    // Rounded to the finest secondsPrecision, dropping floating point noise
+    let seconds = Math.round((minutesDecimal - minutes) * 60 * 1e6) / 1e6;
 
     // Carry over floating point overflow
     if (seconds >= 60) {
@@ -774,7 +853,8 @@ class CoordinateSanitizer {
     let deg = Math.floor(absDecimal);
     const minutesDecimal = (absDecimal - deg) * 60;
     let minutes = Math.floor(minutesDecimal);
-    let seconds = Math.round((minutesDecimal - minutes) * 60 * 1000) / 1000;
+    // Rounded to the finest secondsPrecision, dropping floating point noise
+    let seconds = Math.round((minutesDecimal - minutes) * 60 * 1e6) / 1e6;
 
     // Carry over floating point overflow
     if (seconds >= 60) {
@@ -843,7 +923,7 @@ class CoordinateSanitizer {
    * @throws {TypeError|RangeError} On unknown or out-of-range values
    */
   validateOptions(options) {
-    const { outputFormat, precision, raDecimalUnit } = options;
+    const { outputFormat, precision, secondsPrecision, raDecimalUnit, maxLength } = options;
     if (!["aladin", "decimal", "hms-dms"].includes(outputFormat)) {
       throw new TypeError(
         `Invalid outputFormat: "${outputFormat}" (expected aladin, decimal or hms-dms)`
@@ -854,10 +934,20 @@ class CoordinateSanitizer {
         `Invalid precision: ${precision} (expected an integer between 0 and 20)`
       );
     }
-    if (typeof options.parseDesignations !== "boolean") {
-      throw new TypeError(
-        `Invalid parseDesignations: ${options.parseDesignations} (expected a boolean)`
+    if (!Number.isInteger(secondsPrecision) || secondsPrecision < 0 || secondsPrecision > 6) {
+      throw new RangeError(
+        `Invalid secondsPrecision: ${secondsPrecision} (expected an integer between 0 and 6)`
       );
+    }
+    if (!(Number.isInteger(maxLength) || maxLength === Infinity) || maxLength < 1) {
+      throw new RangeError(
+        `Invalid maxLength: ${maxLength} (expected a positive integer or Infinity)`
+      );
+    }
+    for (const name of ["validateRanges", "strictMode", "parseDesignations", "allowObjectNames"]) {
+      if (typeof options[name] !== "boolean") {
+        throw new TypeError(`Invalid ${name}: ${options[name]} (expected a boolean)`);
+      }
     }
     if (!["degrees", "hours"].includes(raDecimalUnit)) {
       throw new TypeError(
@@ -888,6 +978,7 @@ class CoordinateSanitizer {
       input: [
         "HMS/DMS (12h 34m 56.78s, +12° 34' 56.78\")",
         "Decimal degrees (123.456, -12.345)",
+        "Decimal pair without separator (83.82 -5.39, tab-separated)",
         "Decimal with unit suffix (12.5h, 187.5d)",
         "Without seconds (12 30, +45 30)",
         "Compact (123456.78, -123456.78)",

@@ -73,6 +73,7 @@ console.log(result3.coordinates); // "08 13 49.440, -12 20 42.000"
 - **IAU J2000 designations** (opt-in, `parseDesignations: true`): `J053517.3-052328`, `SDSS J053517.30-052328.0`, `2MASS J05351730-0523280`
 - **Compact**: `123456, -123456`
 - **Space separated**: `12 34 56.7 -45 12 34.5`
+- **Decimal pair without separator**: `83.82 -5.39`, `83.82<TAB>-5.39` (tab-separated columns), `5.588h 5.39`. Two bare integers such as `10 20` are rejected as ambiguous, since they also read as the hours and minutes of an RA: add a comma (`10, 20`), a sign on the DEC (`10 +20`) or a decimal point. Not accepted in strict mode.
 - **Labeled**: `RA 12 34 56.7 DEC -45 12 34.5`, `RA: 12:34:56, DEC: -45:12:34`
 - **Mixed formats**: `12h 34m 56s, +12:34:56`
 - **Decimal comma**: `05 35 16,82 -05 23 15,36`, `05h35m16,8s, +41d16m09,5s` (as written by software on European locales; see [Separators](#separators))
@@ -105,13 +106,16 @@ const sanitizer = new CoordinateSanitizer(options);
 
 **Options:**
 - `outputFormat` (string): Output format - `'aladin'`, `'decimal'`, `'hms-dms'` (default: `'aladin'`)
-- `precision` (number): Decimal precision for output, integer between `0` and `20` (default: `6`)
+- `precision` (number): Decimals of the `decimal` output format, integer between `0` and `20` (default: `6`)
+- `secondsPrecision` (number): Decimals of the seconds in the `aladin` and `hms-dms` output formats, integer between `0` and `6` (default: `3`)
 - `validateRanges` (boolean): Enable range validation (default: `true`)
 - `strictMode` (boolean): Enable strict parsing mode (default: `false`). In strict mode, compact 6-digit formats and space-separated coordinates without an explicit separator are rejected; only unambiguous formats are accepted (HMS/DMS with markers, colon-separated, decimal, labeled).
 - `parseDesignations` (boolean): Parse IAU-style J2000 designations as coordinates instead of passing them through as object names (default: `false`). Designations are truncated, not rounded, so the position is only as accurate as the last digit given.
 - `raDecimalUnit` (string): Unit of a bare decimal RA input and of decimal RA output - `'degrees'` or `'hours'` (default: `'degrees'`, the astronomical convention for decimal coordinates)
+- `allowObjectNames` (boolean): Pass input that is not a coordinate through as an object name (default: `true`). Set to `false` when a field must contain coordinates only: names are then returned as errors.
+- `maxLength` (number): Longer input is rejected before any parsing, positive integer or `Infinity` (default: `256`)
 
-The constructor throws a `TypeError` for an unknown `outputFormat` or `raDecimalUnit`, a non-boolean `parseDesignations`, and a `RangeError` for an invalid `precision`. The resolved `options` object is frozen.
+The constructor throws a `TypeError` for an unknown `outputFormat` or `raDecimalUnit` or a non-boolean `validateRanges`, `strictMode`, `parseDesignations` or `allowObjectNames`, and a `RangeError` for an invalid `precision`, `secondsPrecision` or `maxLength`. The resolved `options` object is frozen.
 
 Note: regardless of `validateRanges`, sexagesimal minutes and seconds must always be in the 0-59 range; `12h 99m 00s` is rejected as malformed notation.
 
@@ -173,6 +177,18 @@ Returns `true` if `sanitizeCoordinates(input)` would return the input unchanged:
 #### `looksLikeCoordinates(input)`
 
 Heuristic used to decide between coordinate parsing and object-name passthrough. Returns `false` for known catalog designations (`M31`, `NGC 1976`, ...).
+
+## Command Line
+
+```bash
+npx coordinate-sanitizer "05 35 17.3 -05 23 28" M31
+# 05 35 17.300, -05 23 28.000
+# M31
+
+cat targets.txt | npx coordinate-sanitizer --format decimal --no-names
+```
+
+Each argument, or each line of standard input when there are no arguments, is sanitized and printed on its own line; errors go to standard error and the exit status is `1` if any input is invalid. Options: `--format`, `--precision`, `--seconds`, `--hours`, `--strict`, `--designations`, `--no-names`, `--json` (see `--help`).
 
 #### Static Methods
 
@@ -426,9 +442,15 @@ The library is optimized for high-performance applications:
 
 ## Security
 
-The library rejects input containing control characters, HTML tags, or the `javascript:` protocol, and never uses `eval()` or dynamic code execution.
+The library rejects input that:
 
-This is input hardening, not output encoding: object names are passed through as typed (trimmed), so **always escape the returned string for the context you render it in** (HTML, SQL, shell, etc.).
+- is longer than `maxLength` (256 characters by default), so that large payloads cannot tie up the parser;
+- contains `<` or `>`, control characters other than tab, line feed and carriage return (which count as whitespace), or invisible Unicode format characters (bidirectional overrides, zero-width spaces; a leading byte order mark is allowed);
+- contains a `javascript:`, `vbscript:` or `data:` URL scheme.
+
+Every regular expression runs in linear time on its input. The library never uses `eval()` or dynamic code execution.
+
+This is input hardening, not output encoding. Object names are passed through as typed (trimmed), and they may still contain quotes, `&` and other characters that matter in HTML attributes, SQL or shell commands; error messages may quote the input too. **Always escape `coordinates` and `error` for the context you render them in**, or set `allowObjectNames: false` when a field must contain coordinates only.
 
 ## Error Handling
 
@@ -454,10 +476,10 @@ Invalid constructor options throw instead of returning an error result.
 ## Testing
 
 ```bash
-# Unit tests (92 tests)
+# Unit tests (105 tests)
 npm test
 
-# Integration tests – round-trip, cross-format consistency, known objects (33 tests)
+# Integration tests – round-trip, cross-format consistency, known objects, randomized (34 tests)
 npm run test:integration
 
 # Full suite
@@ -508,9 +530,9 @@ npm run example
 
 ## Stats
 
-- **Lines of code**: ~940
-- **Unit tests**: 92
-- **Integration tests**: 33 (round-trip, cross-format, known objects)
+- **Lines of code**: ~1020 (library) + ~110 (CLI)
+- **Unit tests**: 105
+- **Integration tests**: 34 (round-trip, cross-format, known objects, randomized)
 - **Performance**: 10,000+ coordinates/second
 - **Bundle size**: Minimal (zero dependencies)
 - **Formats supported**: 15+ input variations
