@@ -539,6 +539,12 @@ npm run example
 
 ## Changelog
 
+### 2.4.0
+- Security hardening: linear-time parsing, `maxLength` (default 256), stricter filtering of markup, URL schemes and invisible characters; tab, CR and LF now count as whitespace
+- Decimal pairs without a separator (`83.82 -5.39`, tab-separated columns); `10 20` is rejected as ambiguous
+- New options `secondsPrecision` and `allowObjectNames`; command-line interface (`npx coordinate-sanitizer`)
+- Breaking: longer or filtered input is rejected, `validateRanges` and `strictMode` must be booleans
+
 ### 2.3.0
 - Decimal commas: `05 35 16,820 -05 23 15,36` is accepted; a comma stays the RA/DEC separator when the input parses that way
 - New `parseRightAscension()` and `parseDeclination()` for RA and DEC in separate fields
